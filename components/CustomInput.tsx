@@ -1,5 +1,5 @@
 import React from "react";
-import { TextInput, StyleSheet, View, Text } from "react-native";
+import { TextInput, StyleSheet, View, Text, TextStyle } from "react-native";
 
 type CustomInputProps = {
   label?: string;
@@ -11,6 +11,7 @@ type CustomInputProps = {
   error?: string;
   multiline?: boolean; // Added multiline prop
   editable?: boolean; // 👈 Add this
+  style?: TextStyle | TextStyle[]; // ✅ Add this line
 };
 
 const CustomInput: React.FC<CustomInputProps> = ({
@@ -23,6 +24,7 @@ const CustomInput: React.FC<CustomInputProps> = ({
   error,
   multiline = false, // Default multiline to false
   editable = true, // 👈 default true
+  style, // ✅ add this line
 }) => {
   return (
     <View style={styles.container}>
@@ -32,6 +34,7 @@ const CustomInput: React.FC<CustomInputProps> = ({
           styles.input,
           multiline && styles.multilineInput, // Apply multiline styles if true
           error && styles.errorInput,
+          style, // ✅ apply custom styles here
         ]}
         value={value}
         placeholder={placeholder}

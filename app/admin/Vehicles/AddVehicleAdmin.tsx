@@ -1,7 +1,7 @@
 // screens/NewVisitor.tsx
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet } from "react-native";
-import { Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { db } from "@/firebaseConfig";
 import { useSociety } from "@/utils/SocietyContext";
 import AppbarComponent from "@/components/AppbarComponent";

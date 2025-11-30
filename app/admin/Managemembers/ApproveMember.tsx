@@ -6,16 +6,22 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import React from "react";
+import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {  IconButton, Divider, List } from "react-native-paper";
+import { IconButton, Divider, List } from "react-native-paper";
 
 import { db } from "@/firebaseConfig";
 import {
+  collection,
+  deleteField,
   doc,
   getDoc,
+  runTransaction,
   updateDoc,
 } from "firebase/firestore";
+import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+import AppbarComponent from "@/components/AppbarComponent";
+import MenuComponent from "@/components/AppbarMenuComponent";
 
 type SocietyDetails = {
   memberRole?: string[];
@@ -43,13 +49,17 @@ type UserDetails = {
     userStatus: string;
     userType: string;
     userEmail: string;
+    usermobileNumber: string;
+    active: boolean;
+    startDate: string;
   };
 };
 
 const ApproveMember = () => {
   const router = useRouter(); // Router for navigation
+  useCustomBackHandler();
 
-  const { itemdetail } = useLocalSearchParams();
+  const { itemdetail, pendingAproval } = useLocalSearchParams();
   const parsedItemDetail = JSON.parse(itemdetail as string);
 
   const parseduserId = parsedItemDetail.userId;
@@ -58,12 +68,26 @@ const ApproveMember = () => {
   const parsedfloorName = parsedItemDetail.floorName;
   const parsedflatNumber = parsedItemDetail.flatNumber;
   const parsedItemDetailUserType = parsedItemDetail.flatDetails.userType;
-  const parsedItemDetailFlatType = parsedItemDetail.flatDetails.FlatType;
+  const parsedItemDetailFlatType = parsedItemDetail.flatDetails.flatType;
 
   const parsedUserName = parsedItemDetail.userName;
   const parsedUserEmail = parsedItemDetail.email;
+  const parsedMobileNumber = parsedItemDetail.mobileNumber;
 
+  const customWingsSubcollectionName = `${parsedsocietyName} wings`;
+  const customFloorsSubcollectionName = `${parsedsocietyName} floors`;
+  const customFlatsSubcollectionName = `${parsedsocietyName} flats`;
 
+  const flatRef = `Societies/${parsedsocietyName}/${customWingsSubcollectionName}/${parsedwing}/${customFloorsSubcollectionName}/${parsedfloorName}/${customFlatsSubcollectionName}/${parsedflatNumber}`;
+
+  let rentFlatOwner = null; // userId
+
+  if (parsedItemDetail.flatDetails.flatType === "Rent") {
+    rentFlatOwner = parsedItemDetail.rentOwnerDetails;
+    // console.log("Owner name:", rentFlatOwner);
+  }
+  //console.log("parseduserId", parseduserId);
+  console.log("parsedItemDetailFlatType", parsedItemDetailFlatType);
 
   const addUserDetailsToFlat = async (
     societyName: string,
@@ -75,10 +99,11 @@ const ApproveMember = () => {
     approvalStatus: string,
     userType: string,
     flatType: string,
-    userEmail: string
+    userEmail: string,
+    usermobileNumber: string
   ) => {
     try {
-      const flatRef = doc(
+      const flatDocRef = doc(
         db,
         "Societies",
         societyName,
@@ -91,7 +116,9 @@ const ApproveMember = () => {
       );
 
       // Fetch the current flat data
-      const flatSnapshot = await getDoc(flatRef);
+      const flatSnapshot = await getDoc(flatDocRef);
+      // 🕓 Use current date as new "fromDate"
+      const start = new Date();
 
       let currentDetails: UserDetails = {};
       if (flatSnapshot.exists()) {
@@ -99,9 +126,15 @@ const ApproveMember = () => {
       }
 
       // Check if the userId exists and update or add new
-      if (currentDetails[userId]) {
+      if (
+        currentDetails[userId] &&
+        typeof currentDetails[userId] === "object"
+      ) {
         currentDetails[userId].userStatus = approvalStatus; // Update status
         currentDetails[userId].userType = userType; // Update userType if needed
+        currentDetails[userId].active = true;
+        currentDetails[userId].usermobileNumber = usermobileNumber;
+        currentDetails[userId].startDate = start.toISOString();
       } else {
         // Add a new user if userId doesn't exist
         currentDetails[userId] = {
@@ -109,6 +142,9 @@ const ApproveMember = () => {
           userStatus: approvalStatus,
           userType,
           userEmail,
+          usermobileNumber,
+          active: true,
+          startDate: start.toISOString(),
         };
       }
 
@@ -159,7 +195,7 @@ const ApproveMember = () => {
 
       // Update the document fields
       // console.log("Before update:", currentDetails[userId]);
-      await updateDoc(flatRef, updates);
+      await updateDoc(flatDocRef, updates);
       // console.log("Updating Firestore with:", updates);
 
       console.log("Flat document updated successfully with user details");
@@ -224,7 +260,8 @@ const ApproveMember = () => {
                   approvalStatus,
                   parsedItemDetailUserType,
                   parsedItemDetailFlatType,
-                  parsedUserEmail
+                  parsedUserEmail,
+                  parsedMobileNumber
                 );
 
                 return {
@@ -280,7 +317,7 @@ const ApproveMember = () => {
               Alert.alert("Success", "Member activated successfully", [
                 {
                   text: "OK",
-                  onPress: () => router.push("/admin/Managemembers"),
+                  onPress: () => router.replace("/admin/Managemembers"),
                 },
               ]);
             }
@@ -315,7 +352,7 @@ const ApproveMember = () => {
               Alert.alert("Success", "Member request rejected successfully", [
                 {
                   text: "OK",
-                  onPress: () => router.push("/admin/Managemembers"),
+                  onPress: () => router.replace("/admin/Managemembers"),
                 },
               ]);
             }
@@ -325,119 +362,514 @@ const ApproveMember = () => {
     );
   };
 
+  const removeExistingUserFromFlat = async (
+    societyName: string,
+    wing: string,
+    floorName: string,
+    flatNumber: string,
+    flatType: string,
+    userType: string,
+    userId: string
+  ) => {
+    try {
+      console.log("🚮 Removing existing user:", userId);
+
+      const flatDocRef = doc(
+        db,
+        "Societies",
+        societyName,
+        `${societyName} wings`,
+        wing,
+        `${societyName} floors`,
+        floorName,
+        `${societyName} flats`,
+        flatNumber
+      );
+
+      const userRef = doc(db, "users", userId);
+      const oldMembersCollectionName = `${societyName}_${wing}_${flatNumber}_oldFlatMembers`;
+      const oldMembersRef = collection(flatDocRef, oldMembersCollectionName);
+
+      await runTransaction(db, async (transaction) => {
+        // ✅ Step 1: ALL READS FIRST
+        const [flatSnap, userSnap] = await Promise.all([
+          transaction.get(flatDocRef),
+          transaction.get(userRef),
+        ]);
+
+        if (!flatSnap.exists()) throw new Error("Flat document not found.");
+
+        const flatData = flatSnap.data();
+        const userData = flatData?.userDetails?.[userId];
+        if (!userData) throw new Error("User not found in flat userDetails.");
+
+        const userDataSnap = userSnap.exists() ? userSnap.data() : null;
+
+        // ✅ Step 2: Prepare data updates (no writes yet)
+        const updates: Record<string, any> = {
+          [`userDetails.${userId}`]: deleteField(),
+        };
+
+        if (flatType === "Rent") {
+          if (userType === "Renter") {
+            updates.renterRegisterd = "Notregistered";
+            updates.memberStatus = "Notregistered";
+          } else {
+            updates.ownerRegisterd = "Notregistered";
+          }
+        } else {
+          updates.ownerRegisterd = "Notregistered";
+          updates.memberStatus = "Notregistered";
+        }
+
+        // ✅ Step 3: Now perform writes (after all reads)
+        const newOldMemberRef = doc(oldMembersRef);
+        transaction.set(newOldMemberRef, {
+          ...userData,
+          userId,
+          active: false,
+          movedOn: new Date().toISOString(),
+          endDate: new Date().toISOString(),
+        });
+
+        transaction.update(flatDocRef, updates);
+
+        if (userDataSnap) {
+          const mySociety = userDataSnap.mySociety || [];
+          const societyIndex = mySociety.findIndex(
+            (soc: any) => Object.keys(soc)[0] === societyName
+          );
+
+          if (societyIndex !== -1) {
+            const societyData = mySociety[societyIndex][societyName];
+            const updatedSociety = { ...societyData };
+
+            if (
+              updatedSociety.myWing?.[wing]?.floorData?.[floorName]?.[
+                flatNumber
+              ]
+            ) {
+              delete updatedSociety.myWing[wing].floorData[floorName][
+                flatNumber
+              ];
+
+              // Clean empty levels
+              if (
+                Object.keys(updatedSociety.myWing[wing].floorData[floorName])
+                  .length === 0
+              )
+                delete updatedSociety.myWing[wing].floorData[floorName];
+              if (
+                Object.keys(updatedSociety.myWing[wing].floorData).length === 0
+              )
+                delete updatedSociety.myWing[wing];
+              if (Object.keys(updatedSociety.myWing).length === 0)
+                delete updatedSociety.myWing;
+            }
+
+            const updatedMySociety = [...mySociety];
+            updatedMySociety[societyIndex] = { [societyName]: updatedSociety };
+
+            transaction.update(userRef, { mySociety: updatedMySociety });
+          }
+        }
+      });
+
+      console.log(`✅ User ${userId} removed and archived successfully.`);
+    } catch (error) {
+      console.error(
+        "❌ Transaction failed while removing existing user:",
+        error
+      );
+      Alert.alert("Error", "Failed to remove existing user.");
+    }
+  };
+
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  // Choose menu items dynamically
+  const menuItems =
+    parsedItemDetailUserType === "Renter"
+      ? [
+          "Edit Renter",
+          "Edit Owner",
+          "Member History",
+          "Bill History",
+          "Delete Renter",
+          "Delete Owner",
+          "Close Menu",
+        ]
+      : ["Edit", "Member History", "Bill History", "Delete", "Close Menu"];
+
+  const handleMenuOptionPress = (option: string) => {
+    console.log(`${option} selected`);
+
+    if (option === "Close Menu") {
+      setMenuVisible(false);
+      return;
+    }
+
+    // Extract userId from parsed item
+    const parsedUserId = parsedItemDetail?.userId;
+
+    // 🧭 Navigation logic
+    if (option === "Edit Renter" || option === "Edit") {
+      router.push({
+        pathname: "/admin/Managemembers/MemberDetails",
+        params: {
+          userId: parsedUserId,
+          societyName: parsedsocietyName,
+          wing: parsedwing,
+          floorName: parsedfloorName,
+          flatNumber: parsedflatNumber,
+          flatType: parsedItemDetailFlatType,
+          userType: parsedItemDetailUserType,
+        },
+      });
+      setMenuVisible(false);
+      return;
+    }
+
+    if (option === "Edit Owner") {
+      // Edit Owner of a Flattype Rent rentFlatOwner.userId
+      router.push({
+        pathname: "/admin/Managemembers/MemberDetails",
+        params: {
+          societyName: parsedsocietyName,
+          wing: parsedwing,
+          floorName: parsedfloorName,
+          flatNumber: parsedflatNumber,
+          flatType: parsedItemDetailFlatType,
+          userType: rentFlatOwner.userType,
+          userId: rentFlatOwner.userId,
+        },
+      });
+      setMenuVisible(false);
+      return;
+    }
+
+    if (option === "Delete Owner") {
+      Alert.alert(
+        "Member Detail",
+        "Are you sure you want to delete? This member will go to member history.",
+        [
+          {
+            text: "No",
+            style: "cancel",
+            onPress: () => console.log("❌ Delete cancelled"),
+          },
+          {
+            text: "Yes",
+            style: "destructive",
+            onPress: async () => {
+              console.log("✅ User confirmed delete Rent Flat Owner");
+              try {
+                // 🔹 Call your removeExistingUserFromFlat
+                await removeExistingUserFromFlat(
+                  parsedsocietyName,
+                  parsedwing,
+                  parsedfloorName,
+                  parsedflatNumber,
+                  parsedItemDetailFlatType,
+                  rentFlatOwner.userType,
+                  rentFlatOwner.userId
+                );
+
+                // ✅ After success, show alert and navigate
+                Alert.alert(
+                  "Success",
+                  "User removed and archived successfully.",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => {
+                        console.log("➡️ Redirecting to Manage Members");
+                        router.replace("/admin/Managemembers");
+                      },
+                    },
+                  ]
+                );
+              } catch (error) {
+                console.error("❌ Error while deleting member:", error);
+                Alert.alert("Error", "Failed to delete the member.");
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    }
+
+    // Delete User
+    if (option === "Delete" || option === "Delete Renter") {
+      Alert.alert(
+        "Member Detail",
+        "Are you sure you want to delete? This member will go to member history.",
+        [
+          {
+            text: "No",
+            style: "cancel",
+            onPress: () => console.log("❌ Delete cancelled"),
+          },
+          {
+            text: "Yes",
+            style: "destructive",
+            onPress: async () => {
+              console.log("✅ User confirmed delete");
+              try {
+                // 🔹 Call your removeExistingUserFromFlat
+                await removeExistingUserFromFlat(
+                  parsedsocietyName,
+                  parsedwing,
+                  parsedfloorName,
+                  parsedflatNumber,
+                  parsedItemDetailFlatType,
+                  parsedItemDetailUserType,
+                  parsedUserId
+                );
+
+                // ✅ After success, show alert and navigate
+                Alert.alert(
+                  "Success",
+                  "User removed and archived successfully.",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => {
+                        console.log("➡️ Redirecting to Manage Members");
+                        router.replace("/admin/Managemembers");
+                      },
+                    },
+                  ]
+                );
+              } catch (error) {
+                console.error("❌ Error while deleting member:", error);
+                Alert.alert("Error", "Failed to delete the member.");
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    }
+
+    // Handle other options (Member History, Bill History, Delete, etc.)
+    console.log(`${option} clicked`);
+  };
+
+  const closeMenu = () => {
+    setMenuVisible(false);
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <IconButton
-          icon="arrow-left"
-          size={24}
-          onPress={() => {}}
-          iconColor="white"
+    <View style={styles.container}>
+      <AppbarComponent
+        title={`${parsedwing} ${parsedflatNumber}`} // ✅ Correct template literal
+        source="Admin"
+        onPressThreeDot={() => setMenuVisible(!menuVisible)}
+      />
+      {/* Three-dot Menu */}
+      {/* Custom Menu */}
+
+      {menuVisible && (
+        <MenuComponent
+          items={menuItems}
+          onItemPress={handleMenuOptionPress}
+          closeMenu={closeMenu}
         />
-        <Text style={styles.headerTitle}>{parsedItemDetail.flatNumber}</Text>
-        <IconButton
-          icon="dots-vertical"
-          size={24}
-          onPress={() => {}}
-          iconColor="white"
-        />
-      </View>
+      )}
 
-      {/* Profile */}
-      <View style={styles.profileContainer}>
-        <TouchableOpacity
-          style={[styles.profileImageContainer, { backgroundColor: "#fff" }]}
-        >
-          <IconButton icon="account" size={80} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Buttons */}
-
-      <View style={styles.buttonsContainer}>
-        <TouchableOpacity
-          style={[styles.touchableButton, { backgroundColor: "green" }]}
-          onPress={() => {
-            handleActivate();
-          }}
-        >
-          <Text style={styles.buttonText}>Activate</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.touchableButton, { backgroundColor: "red" }]}
-          onPress={() => {
-            handleDecline();
-          }}
-        >
-          <Text style={styles.buttonText}>Decline</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Divider />
-      {/* Name */}
-
-      <View style={{ flex: 1 }}>
-        <View style={styles.nameContainer}>
-          <Text style={styles.name}>{parsedItemDetail.userName}</Text>
+      <ScrollView style={styles.container}>
+        {/* Profile */}
+        <View style={styles.profileContainer}>
+          <TouchableOpacity
+            style={[styles.profileImageContainer, { backgroundColor: "#fff" }]}
+          >
+            <IconButton icon="account" size={80} />
+          </TouchableOpacity>
         </View>
-      </View>
 
-      {/* Phone */}
+        {/* Buttons */}
 
-      <Divider />
-
-      <View style={styles.optionsContainer}>
-        <View style={styles.row}>
-          <IconButton icon="phone" iconColor="#6200ee" onPress={() => {}} />
-          <View>
-            <Text style={styles.info}>9730667309</Text>
-            <Text style={styles.label}>Mobile</Text>
+        {pendingAproval === "True" && (
+          <View style={styles.buttonsContainer}>
+            <TouchableOpacity
+              style={[styles.touchableButton, { backgroundColor: "green" }]}
+              onPress={() => {
+                handleActivate();
+              }}
+            >
+              <Text style={styles.buttonText}>Activate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.touchableButton, { backgroundColor: "red" }]}
+              onPress={() => {
+                handleDecline();
+              }}
+            >
+              <Text style={styles.buttonText}>Decline</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        )}
 
-      {/* Details Section */}
-      <View style={styles.detailsContainer}>
-        <View style={styles.row}>
-          <List.Icon icon="account-group" />
-          <View style={styles.countContainer}>
-            <Text>0 </Text>
-            <Text> Adult Count</Text>
-          </View>
-        </View>
-        <View style={styles.row}>
-          <List.Icon icon="baby" />
-          <View style={styles.countContainer}>
-            <Text>0 </Text>
-            <Text> Child Count</Text>
-          </View>
-        </View>
-      </View>
-
-      <Divider />
-
-      {/* Options Section */}
-      <View style={styles.optionsContainer}>
-        <List.Item
-          title="Owner"
-          left={(props) => <List.Icon {...props} icon="account" />}
-          onPress={() => {}}
-        />
         <Divider />
-        <List.Item
-          title="View Bill History"
-          left={(props) => <List.Icon {...props} icon="file-document" />}
-          onPress={() => {}}
-        />
+        {/* Name */}
+
+        <View style={{ flex: 1 }}>
+          <View style={styles.nameContainer}>
+            <Text style={styles.name}>{parsedItemDetail.userName}</Text>
+          </View>
+        </View>
+
         <Divider />
-        <List.Item
-          title="Manage Member History"
-          left={(props) => <List.Icon {...props} icon="history" />}
-          onPress={() => {}}
-        />
-      </View>
-    </ScrollView>
+        {/* Phone */}
+
+        <View style={styles.optionsContainer}>
+          <View style={styles.row}>
+            <IconButton icon="phone" iconColor="#6200ee" onPress={() => {}} />
+            <View>
+              <Text style={styles.info}>{parsedMobileNumber}</Text>
+              <Text style={styles.label}>Mobile</Text>
+            </View>
+          </View>
+        </View>
+        <Divider />
+
+        {/* Details Section */}
+        <View style={styles.detailsContainer}>
+          <View style={styles.row}>
+            <List.Icon icon="account-group" />
+            <View style={styles.countContainer}>
+              <Text>0 </Text>
+              <Text> Adult Count</Text>
+            </View>
+          </View>
+          <View style={styles.row}>
+            <List.Icon icon="baby" />
+            <View style={styles.countContainer}>
+              <Text>0 </Text>
+              <Text> Child Count</Text>
+            </View>
+          </View>
+        </View>
+
+        <Divider />
+
+        {rentFlatOwner ? (
+          <>
+            {/* Rent Flat Owner */}
+            <View style={styles.optionsContainer}>
+              <View style={styles.row}>
+                <IconButton
+                  icon="phone"
+                  iconColor="#6200ee"
+                  onPress={() => {}}
+                />
+                <View>
+                  <Text style={styles.label}>Owner Details</Text>
+                  <Text style={styles.info}>{rentFlatOwner.userName}</Text>
+                  <Text style={styles.label}>{rentFlatOwner.mobileNumber}</Text>
+                </View>
+              </View>
+            </View>
+            <Divider />
+          </>
+        ) : (
+          <>
+            {/* Add Owner Button */}
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                padding: 12,
+                borderRadius: 8,
+                borderColor: "#6200ee",
+                borderWidth: 2,
+                margin: 16,
+              }}
+              onPress={() => {
+                router.push({
+                  pathname: "/admin/Managemembers/MemberDetails",
+                  params: {
+                    societyName: parsedsocietyName,
+                    wing: parsedwing,
+                    floorName: parsedfloorName,
+                    flatNumber: parsedflatNumber,
+                    flatType: "Rent",
+                    userType: "Owner",
+                    addNew: "true",
+                  },
+                });
+              }}
+            >
+              <IconButton
+                icon="plus"
+                iconColor="#6200ee"
+                size={20}
+                style={{ margin: 0 }}
+              />
+              <Text style={{ fontSize: 16, marginLeft: -8 }}>
+                Add Owner Details
+              </Text>
+            </TouchableOpacity>
+
+            <Divider />
+          </>
+        )}
+
+        {/* Options Section */}
+        <View style={styles.optionsContainer}>
+          <List.Item
+            title={`${parsedItemDetailUserType}`}
+            left={(props) => <List.Icon {...props} icon="account" />}
+            onPress={() => {}}
+          />
+          <Divider />
+          <List.Item
+            title="View Bill History"
+            left={(props) => <List.Icon {...props} icon="file-document" />}
+            onPress={() => {}}
+          />
+          <Divider />
+          <List.Item
+            title="Manage Member History"
+            left={(props) => <List.Icon {...props} icon="history" />}
+            onPress={() => {
+              router.push({
+                pathname: "/admin/Managemembers/FlatMemberHistory",
+                params: {
+                  flatRef,
+                  parsedsocietyName,
+                  parsedwing,
+                  parsedfloorName,
+                  parsedflatNumber,
+                  parsedItemDetailFlatType,
+                  parsedItemDetailUserType,
+                  parseduserId,
+                  //itemdetail: JSON.stringify(item),
+                  // Add other necessary params if available
+                },
+              });
+            }}
+          />
+          <Divider />
+          <View style={styles.optionsContainer}>
+            <View style={styles.row}>
+              <IconButton
+                icon="square"
+                iconColor="#6200ee"
+                onPress={() => {}}
+              />
+              <View>
+                <Text style={styles.info}>0.00</Text>
+                <Text style={styles.label}>Square Feet</Text>
+              </View>
+            </View>
+          </View>
+          <Divider />
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -445,18 +877,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#6200ee",
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "bold",
   },
   profileContainer: {
     alignItems: "center",

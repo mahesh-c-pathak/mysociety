@@ -8,16 +8,15 @@ import {
   Text,
   KeyboardAvoidingView,
   Platform,
-  
 } from "react-native";
-import { Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import CustomButton from "@/components/CustomButton";
 import CustomInput from "@/components/CustomInput";
+// ✅ new unified setup function
+import { initializeFullSocietySetup } from "@/utils/SetupWIngs/initializeFullSocietySetup";
 
 import {
   doc,
-  setDoc,
   collection,
   updateDoc,
   arrayUnion,
@@ -26,10 +25,7 @@ import {
 import { db } from "@/firebaseConfig";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthRole } from "@/lib/authRole";
-import {
-  addSocietyWithLedgerGroups,
-  addPredefinedAccountsWithBalances,
-} from "@/utils/SetupWIngs/setUpLedger";
+import AppbarComponent from "@/components/AppbarComponent";
 
 const RequestTrialScreen: React.FC = () => {
   const [societyName, setSocietyName] = useState("");
@@ -39,24 +35,25 @@ const RequestTrialScreen: React.FC = () => {
   const [pincode, setPincode] = useState("");
   const [address, setAddress] = useState("");
   const router = useRouter();
-   const { user } = useAuthRole();
-   const insets = useSafeAreaInsets();
-     
+  const { user } = useAuthRole();
+  const insets = useSafeAreaInsets();
+
+  const [customWingNames, setCustomWingNames] = useState<string[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
 
-  const generateUniqueSocietyCode = async () => {
+  const generateUniqueSocietyCode = async (): Promise<string> => {
     const societiesRef = collection(db, "Societies");
-    let uniqueCode;
+    let uniqueCode = ""; // ✅ Initialize to avoid TS error
     let exists = true;
 
     while (exists) {
-      uniqueCode = Math.floor(1000 + Math.random() * 9000).toString(); // Generate 4-digit code
+      uniqueCode = Math.floor(1000 + Math.random() * 9000).toString();
       const querySnapshot = await getDoc(doc(societiesRef, uniqueCode));
-      exists = querySnapshot.exists(); // Check if society with this code exists
+      exists = querySnapshot.exists();
     }
 
-    return uniqueCode;
+    return uniqueCode; // ✅ Always defined
   };
 
   const assignAdminRole = async (userId: string, societyName: string) => {
@@ -85,12 +82,24 @@ const RequestTrialScreen: React.FC = () => {
       Alert.alert("Validation Error", "Please fill in all the fields.");
       return;
     }
+
+    if (
+      customWingNames.length > 0 &&
+      customWingNames.filter((n) => n.trim() !== "").length !==
+        Number(totalWings)
+    ) {
+      Alert.alert(
+        "Validation Error",
+        "Please enter all custom wing names or leave them all blank."
+      );
+      return;
+    }
     setLoading(true);
 
     try {
       const societiesRef = collection(db, "Societies");
       const societyDocRef = doc(societiesRef, societyName);
-      
+
       // Check if the society already exists
       const societyDocSnap = await getDoc(societyDocRef);
       if (societyDocSnap.exists()) {
@@ -104,46 +113,25 @@ const RequestTrialScreen: React.FC = () => {
       // Generate unique society code
       const societyCode = await generateUniqueSocietyCode();
 
-      // Create society-level document
-      await setDoc(societyDocRef, {
-        name: societyName,
-        totalWings: Number(totalWings),
+      // ✅ Use the unified setup function
+      await initializeFullSocietySetup(
+        societyName,
+        Number(totalWings),
         state,
         city,
         pincode,
         address,
-        societycode: societyCode,
-      });
+        societyCode,
+        user?.uid ?? "",
+        customWingNames.filter((n) => n.trim() !== "") // ✅ pass only filled names
+      );
 
-      // Initialize wing structure
-      for (let i = 1; i <= Number(totalWings); i++) {
-        const wingLetter = String.fromCharCode(64 + i); // Convert 1 -> A, 2 -> B, etc
-        const wingName = wingLetter; // "Wing A", "Wing B", etc.
-        const customWingsSubcollectionName = `${societyName} wings`;
-        const wingRef = doc(
-          collection(societyDocRef, customWingsSubcollectionName),
-          wingName
-        );
-
-        await setDoc(wingRef, {
-          totalFloors: 0,
-          unitsPerFloor: 0,
-          format: "",
-        });
-      }
-
-      // Assign Admin role
+      // ✅ Step 4: Assign Admin role in the user's document
       assignAdminRole(user!.uid, societyName);
-
-      // add Society LedgerGroups
-      await addSocietyWithLedgerGroups(societyName);
-
-      //
-      await addPredefinedAccountsWithBalances(societyName);
 
       Alert.alert("Success", "Society and wings initialized successfully!");
       router.push({
-        pathname: "/setupsociety/SetupWingsScreen", 
+        pathname: "/setupsociety/SetupWingsScreen",
         params: { societyName, totalWings },
       });
     } catch (error) {
@@ -163,27 +151,19 @@ const RequestTrialScreen: React.FC = () => {
   }
 
   return (
-    
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0} // offset for header height
-      style={styles.container}
-    >
+    <View style={styles.container}>
+      {/* Top Appbar */}
+      <AppbarComponent title="Request a Trial" />
 
-      
-        {/* Top Appbar */}
-        <Appbar.Header style={styles.header}>
-          <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-          <Appbar.Content
-            title="Request a Trial"
-            titleStyle={styles.titleStyle}
-          />
-        </Appbar.Header>
-
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0} // offset for header height
+        style={styles.container}
+      >
         <FlatList
           data={[{}]} // Use a single-item list to render your UI
           renderItem={() => (
-            <>
+            <View style={styles.container}>
               <Text style={styles.title}>Building Details</Text>
               {/* Society Name */}
               <View style={styles.customInputContainer}>
@@ -203,6 +183,29 @@ const RequestTrialScreen: React.FC = () => {
                   keyboardType="numeric"
                 />
               </View>
+
+              {/* Custom Wing Names (Optional) */}
+              {Number(totalWings) > 0 && (
+                <View style={{ marginBottom: 20, marginHorizontal: 20 }}>
+                  <Text style={{ fontWeight: "bold", marginBottom: 8 }}>
+                    Optional: Enter Custom Wing Names
+                  </Text>
+                  <View style={{ marginRight: 80 }}>
+                    {Array.from({ length: Number(totalWings) }, (_, i) => (
+                      <CustomInput
+                        key={i}
+                        label={`Wing ${i + 1} Name`}
+                        value={customWingNames[i] || ""}
+                        onChangeText={(text) => {
+                          const updated = [...customWingNames];
+                          updated[i] = text.trim();
+                          setCustomWingNames(updated);
+                        }}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
 
               {/* State Dropdown */}
               <View style={styles.customInputContainer}>
@@ -236,23 +239,18 @@ const RequestTrialScreen: React.FC = () => {
                   multiline={true}
                 />
               </View>
-              <View style={{ minHeight: 48 }}></View>
-            </>
+            </View>
           )}
           keyExtractor={(item, index) => index.toString()}
           contentContainerStyle={[
             styles.scrollContainer,
-            { paddingBottom: 140}, // ensure content not hidden
+            { paddingBottom: insets.bottom + 140 }, // ensure content not hidden
           ]}
         />
+      </KeyboardAvoidingView>
 
-        {/* Save Button */}
-        <View
-        style={[
-          styles.footer,
-          { bottom: insets.bottom },
-        ]}
-      >
+      {/* Save Button */}
+      <View style={[styles.footer, { bottom: insets.bottom }]}>
         <CustomButton
           onPress={() => {
             validateAndSubmit();
@@ -260,10 +258,8 @@ const RequestTrialScreen: React.FC = () => {
           title={"Register"}
           style={styles.footerButton}
         />
-        </View>
-      
-    </KeyboardAvoidingView>
-   
+      </View>
+    </View>
   );
 };
 
@@ -278,8 +274,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  header: { backgroundColor: "#2196F3" },
-  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+
   scrollContainer: { padding: 16 },
   customInputContainer: {
     width: "100%",
@@ -291,30 +286,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  input: {
-    marginBottom: 16,
-  },
-  submitButton: {
-    marginTop: 16,
-  },
-footer: {
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,   // 👈 ensures it's always visible at bottom
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0, // 👈 ensures it's always visible at bottom
     backgroundColor: "#fff",
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#ddd",
   },
-footerButton: {
+  footerButton: {
     width: "100%",
     borderRadius: 12,
-    backgroundColor: "#2196F3" 
+    backgroundColor: "#2196F3",
   },
-  
 });
 
 export default RequestTrialScreen;
-
- 

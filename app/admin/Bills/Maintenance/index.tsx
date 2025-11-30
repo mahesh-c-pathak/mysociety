@@ -6,20 +6,25 @@ import {
   FlatList,
   Pressable,
   TouchableWithoutFeedback,
-  TouchableOpacity,
 } from "react-native";
-import { Button, Card, FAB, Surface } from "react-native-paper";
+import { Button, Card, Divider, FAB, Surface } from "react-native-paper";
 import { useRouter } from "expo-router";
-import PaymentDatePicker from "@/utils/paymentDate";
 
-import { getDocs, collectionGroup, query, where } from "firebase/firestore";
+import {
+  getDocs,
+  collectionGroup,
+  query,
+  where,
+  collection,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import AppbarComponent from "@/components/AppbarComponent";
 import MenuComponent from "@/components/AppbarMenuComponent";
 import { useSociety } from "@/utils/SocietyContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getCurrentFinancialYear } from "@/utils/financialYearHelpers";
-import { formatDate } from "../../../../utils/dateFormatter";
+import DateRangePicker from "@/components/DateRangePicker";
 
 interface BillData {
   id: string;
@@ -32,51 +37,52 @@ interface BillData {
 const GenerateScheduledBills = () => {
   const insets = useSafeAreaInsets();
   const { societyName } = useSociety();
-  const [fromDate, setFromDate] = useState(new Date(Date.now()));
-  const [toDate, setToDate] = useState(new Date(Date.now()));
   const router = useRouter();
-  const [datesReady, setDatesReady] = useState(false);
+  // const [datesReady, setDatesReady] = useState(false);
 
-  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const { startDate, endDate } = getCurrentFinancialYear(); // returns start and end of current FY
+  // Get the current date and set it to the 1st of the current month
+  const getFirstDayOfMonth = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  };
+  const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
 
-  // const scheduledBillCollectionName = `scheduledBills_${societyName}`;
+  const [toDate, setToDate] = useState(new Date(Date.now()));
 
   const [bills, setBills] = useState<BillData[]>([]);
-  useEffect(() => {
-    // Set initial state for current financial year
-    const { startDate, endDate } = getCurrentFinancialYear();
-    setFromDate(new Date(startDate));
-    setToDate(new Date(endDate)); // 👈 always today
-    setDatesReady(true);
-  }, []);
-
-  // 🔹 Initial fetch (only after datesReady is set)
-  useEffect(() => {
-    if (societyName && datesReady) {
-      console.log("Fetching with range:", fromDate, toDate);
-      fetchBills(fromDate, toDate);
-    }
-  }, [societyName, datesReady]);
 
   // 🔹 Go button handler
-  const handleGoPress = () => {
+
+  useEffect(() => {
     fetchBills(fromDate, toDate);
-  };
+  }, []);
 
   const fetchBills = async (from: Date, to: Date) => {
     console.log("societyName from fetchBills", societyName);
     try {
-      const scheduledBillChildCollectionName = `scheduledBillsChilds_${societyName}`;
-      const customFlatsBillsSubcollectionName = `${societyName} bills`;
+      // const scheduledBillChildCollectionName = `scheduledBillsChilds_${societyName}`;
+      //const customFlatsBillsSubcollectionName = `${societyName} bills`;
 
-      // 🔹 Filter by startDate between from & to
-      const billsQuery = query(
-        collectionGroup(db, scheduledBillChildCollectionName),
-        where("startDate", ">=", formatDate(from)),
-        where("startDate", "<=", formatDate(to))
+      const customFlatsBillsSubcollectionName = "flatbills";
+
+      // Fetch bills from the "bills" collection
+
+      const billsRef = collection(db, "Bills");
+
+      const fromISO = from.toISOString();
+      const toISO = to.toISOString();
+
+      // ✅ Query: Only "Special Bill" & order by createdAt descending
+      const q = query(
+        billsRef,
+        where("societyName", "==", societyName),
+        where("billType", "==", "Scheduled Bill"),
+        where("createdAt", ">=", fromISO),
+        where("createdAt", "<=", toISO),
+        orderBy("createdAt", "desc")
       );
-
-      const billsSnapshot = await getDocs(billsQuery);
+      const billsSnapshot = await getDocs(q);
 
       const billsData: BillData[] = [];
 
@@ -88,8 +94,13 @@ const GenerateScheduledBills = () => {
         let paidAmount = 0;
 
         // 🔹 Match flats’ bills by billNumber
+        const customFlatsBillsSubcollectionNameQuery = query(
+          collectionGroup(db, customFlatsBillsSubcollectionName),
+          where("societyName", "==", societyName)
+        );
+
         const flatsBillSnapshot = await getDocs(
-          collectionGroup(db, customFlatsBillsSubcollectionName)
+          customFlatsBillsSubcollectionNameQuery
         );
 
         flatsBillSnapshot.forEach((doc) => {
@@ -187,22 +198,18 @@ const GenerateScheduledBills = () => {
           />
         )}
 
-        {/* Date Inputs */}
-        <View style={styles.dateInputsContainer}>
-          <View style={styles.section}>
-            <PaymentDatePicker
-              initialDate={fromDate}
-              onDateChange={setFromDate}
-            />
-          </View>
-          <View style={styles.section}>
-            <PaymentDatePicker initialDate={toDate} onDateChange={setToDate} />
-          </View>
+        {/* Date Range Inputs */}
 
-          <TouchableOpacity style={styles.goButton} onPress={handleGoPress}>
-            <Text style={styles.goButtonText}>Go</Text>
-          </TouchableOpacity>
-        </View>
+        <DateRangePicker
+          fromDate={fromDate}
+          toDate={toDate}
+          setFromDate={setFromDate}
+          setToDate={setToDate}
+          onGoPress={() => fetchBills(fromDate, toDate)} // 👈 refresh on Go
+          minimumDate={new Date(startDate)}
+          maximumDate={new Date(endDate)}
+        />
+        <Divider />
 
         {/* Bill Card */}
         <FlatList
@@ -244,16 +251,6 @@ const GenerateScheduledBills = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  anchor: { position: "absolute", top: 0, right: 0 }, // Adjust position as needed
-  dateInputs: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  dateInput: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
   billCard: {
     elevation: 2,
     borderRadius: 8,
@@ -290,45 +287,14 @@ const styles = StyleSheet.create({
     color: "gray",
     marginTop: 5,
   },
-  billCollectionButton: {
-    backgroundColor: "green",
-    position: "absolute",
-    bottom: 2,
-    left: 10,
-    right: 10,
-    borderRadius: 5,
-  },
+
   fab: {
     position: "absolute",
     right: 20,
     bottom: 20,
     backgroundColor: "#6200ee",
   },
-  menuIcon: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-  },
-  customMenu: {
-    position: "absolute",
-    top: 50,
-    right: 10,
-    backgroundColor: "white",
-    borderRadius: 8,
-    elevation: 5,
-    padding: 10,
-    zIndex: 1,
-  },
-  menuItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: "#ccc",
-    marginVertical: 5,
-  },
+
   emptyText: {
     textAlign: "center",
     marginTop: 16,
@@ -348,26 +314,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "green",
   },
-  dateInputsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  goButton: {
-    backgroundColor: "#808080",
-    justifyContent: "center", // Center text vertically
-    alignItems: "center", // Center text horizontally
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 5,
-    marginHorizontal: 10,
-    marginBottom: 10,
-  },
-  goButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  section: { flex: 1, margin: 5 },
 });
 
 export default GenerateScheduledBills;

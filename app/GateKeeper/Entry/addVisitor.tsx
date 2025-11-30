@@ -53,7 +53,8 @@ const AddVisitor = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customVisitorCollectionName = `visitor_${societyName}`;
+  // const customVisitorCollectionName = `visitor_${societyName}`;
+  const customVisitorCollectionName = "visitor";
 
   const visitorTypes = [
     "Visitor",
@@ -199,6 +200,7 @@ const AddVisitor = () => {
       const formattedDateTime = formatDateTime(currentDate); // Example: "11 Dec 9:18 pm"
       // ✅ Construct the Firestore document with necessary fields
       const visitorData: Record<string, any> = {
+        societyName,
         name,
         mobileNumber,
         visitorType,

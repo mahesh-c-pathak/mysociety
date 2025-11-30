@@ -38,7 +38,9 @@ const VisitorExit = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customVisitorCollectionName = `visitor_${societyName}`;
+  // const customVisitorCollectionName = `visitor_${societyName}`;
+
+  const customVisitorCollectionName = "visitor";
 
   const [loading, setLoading] = useState(false);
 
@@ -83,6 +85,7 @@ const VisitorExit = () => {
       // Query: Fetch visitors where visitorStatus is "CheckedOut" and createdAt is within the range
       let visitorQuery = query(
         collectionGroup(db, customVisitorCollectionName),
+        where("societyName", "==", societyName),
         where("visitorStatus", "==", "Approved"),
         where("createdAt", ">=", fromTimestamp),
         where("createdAt", "<=", toTimestamp)

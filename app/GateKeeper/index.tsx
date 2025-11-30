@@ -83,7 +83,12 @@ const Dashboard = () => {
         },
         { name: "Vehicles", icon: "car", route: "/vehicles" },
         { name: "Directory", icon: "phone", route: "/directory" },
-        { name: "Tasks", icon: "clipboard-list", route: "/tasks" },
+        {
+          name: "Tasks",
+          icon: "clipboard-list",
+          route:
+            "/GateKeeper/TasksGateKeeper/TaskTypesGateKeeper/OpenTasksGateKeeper",
+        },
       ],
     },
   ];

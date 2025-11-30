@@ -16,7 +16,9 @@ const ClosedComplains = () => {
   const router = useRouter();
   const { societyName, wing, flatNumber } = useSociety();
 
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+
+  const customComplainSubcollectionName = "complains";
 
   const [complainData, setComplainData] = useState<any[]>([]);
   const fetchComplainData = async () => {
@@ -24,6 +26,7 @@ const ClosedComplains = () => {
       // Query 1: classification = "Public"
       const publicQuery = query(
         collectionGroup(db, customComplainSubcollectionName),
+        where("societyName", "==", societyName),
         where("classification", "==", "Public"),
         where("status", "!=", "Open") // Ensuring status is Open
       );
@@ -31,6 +34,7 @@ const ClosedComplains = () => {
       // Query 2: createdBy = "A 101"
       const createdByQuery = query(
         collectionGroup(db, customComplainSubcollectionName),
+        where("societyName", "==", societyName),
         where("createdBy", "==", `${wing} ${flatNumber}`),
         where("status", "!=", "Open") // Ensuring status is Open
       );

@@ -1,32 +1,12 @@
-import {
-  StyleSheet,
-  View,
-  ScrollView,
-  TextInput,
-  Alert,
-} from "react-native";
+import { StyleSheet, View, ScrollView, TextInput, Alert } from "react-native";
 import React, { useState, useEffect } from "react";
-import {
-  useRouter,
-  useLocalSearchParams,
-  Stack,
-} from "expo-router";
-import {
-  Appbar,
-  Button,
-  Text,
-  Avatar,
-} from "react-native-paper";
+import { useRouter, useLocalSearchParams, Stack } from "expo-router";
+import { Appbar, Button, Text, Avatar } from "react-native-paper";
 import { db } from "@/firebaseConfig";
-import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, setDoc } from "firebase/firestore";
 
 import { useSociety } from "@/utils/SocietyContext";
-import { generateVoucherNumber } from "@/utils/generateVoucherNumber";
+import { GenerateVoucherNumber } from "@/utils/generateVoucherNumber";
 import { updateLedger } from "@/utils/updateLedger";
 import Dropdown from "@/utils/DropDown";
 import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
@@ -34,10 +14,12 @@ import PaymentDatePicker from "@/utils/paymentDate";
 import { generateTransactionId } from "@/utils/generateTransactionId";
 import { updateFlatCurrentBalance } from "@/utils/updateFlatCurrentBalance";
 import paymentModeOptions from "@/utils/paymentModeOptions";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Refund = () => {
   const router = useRouter();
   const { societyName } = useSociety();
+  const insets = useSafeAreaInsets();
 
   const params = useLocalSearchParams();
   const wing = params.wing as string;
@@ -58,13 +40,19 @@ const Refund = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const [paymentMode, setpaymentMode] = useState<string>("");
   const [showPaymentMode, setShowPaymentMode] = useState<boolean>(false);
   const [bankAccountOptions, setBankAccountOptions] = useState<
     { label: string; value: string; group: string }[]
   >([]);
+
+  // 🧾 State for Cheque Inputs
+  const [bankName, setBankName] = useState("");
+  const [chequeNo, setChequeNo] = useState("");
 
   // Payment Date State
 
@@ -96,13 +84,17 @@ const Refund = () => {
           await fetchbankCashAccountOptions(societyName);
         setAccountFromOptions(accountFromOptions);
         setBankAccountOptions(bankAccountOptions);
-      } catch (error) {
-        Alert.alert("Error", "Failed to fetch bank Cash account options.");
+      } catch (err) {
+        const error = err as Error; // Explicitly cast 'err' to 'Error'
+        Alert.alert(
+          "Error",
+          error.message || "Failed to fetch bank Cash account options."
+        );
       }
     };
 
     fetchbankCashOptions();
-  }, [params?.id]);
+  }, [params.id, societyName]);
 
   useEffect(() => {
     if (bankAccountOptions.some((option) => option.group === groupFrom)) {
@@ -111,7 +103,7 @@ const Refund = () => {
       setShowPaymentMode(false);
       setpaymentMode("Cash");
     }
-  }, [bankAccountOptions, ledgerAccount]);
+  }, [bankAccountOptions, groupFrom, ledgerAccount]);
 
   const handleSave = async () => {
     try {
@@ -127,7 +119,8 @@ const Refund = () => {
       const flatDocRef = doc(db, flatRef);
       if (currentBalance >= refundAmount) {
         try {
-          const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+          // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+          const currentBalanceSubcollectionName = "flatCurrentBalance";
           const currentbalanceCollectionRef = collection(
             db,
             flatRef,
@@ -138,7 +131,8 @@ const Refund = () => {
             currentbalanceCollectionRef,
             refundAmount,
             "Subtract",
-            formattedDate
+            formattedDate,
+            societyName
           );
 
           console.log("Flat current Balance update result:", result);
@@ -166,10 +160,11 @@ const Refund = () => {
         docSnap = await getDoc(docRef); // Check again
       }
 
-      const voucherNumber = await generateVoucherNumber();
+      const voucherNumber = await GenerateVoucherNumber(societyName);
 
       // Create a new advance entry
       const newAdvanceEntry = {
+        societyName: societyName,
         status: "Cleared",
         amount: refundAmount,
         amountReceived: refundAmount,
@@ -182,6 +177,8 @@ const Refund = () => {
         type: "Refund",
         origin: "Admin entered Refund",
         ledgerAccountGroup: groupFrom,
+        bankName,
+        chequeNo,
       };
 
       // Set the document once we have a unique transactionId
@@ -235,8 +232,12 @@ const Refund = () => {
         ],
         { cancelable: false } // Ensure user cannot dismiss the alert without pressing OK
       );
-    } catch (error) {
-      Alert.alert("Error", "Failed to save payment. Please try again.");
+    } catch (err) {
+      const error = err as Error; // Explicitly cast 'err' to 'Error'
+      Alert.alert(
+        "Error",
+        error.message || "Failed to save payment. Please try again."
+      );
     }
   };
 
@@ -322,6 +323,27 @@ const Refund = () => {
           </View>
         )}
 
+        {paymentMode === "Cheque" && (
+          <>
+            <Text style={styles.label}>Bank Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Bank Name"
+              value={bankName}
+              onChangeText={setBankName}
+            />
+
+            <Text style={styles.label}>Cheque No.</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Cheque Number"
+              keyboardType="numeric"
+              value={chequeNo}
+              onChangeText={setChequeNo}
+            />
+          </>
+        )}
+
         {/* Payment Date */}
         <View style={styles.section}>
           <Text style={styles.label}>Payment Date</Text>
@@ -335,7 +357,7 @@ const Refund = () => {
       {/* Accept Button */}
       <Button
         mode="contained"
-        style={styles.saveButton}
+        style={[styles.saveButton, { bottom: insets.bottom }]}
         onPress={() => handleSave()}
       >
         Save
@@ -377,22 +399,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   noteInput: { height: 80, textAlignVertical: "top" },
-  dropdown: { backgroundColor: "#6200ee" },
-  dateInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  dateInput: {
-    flex: 1,
-    borderWidth: 1,
-    paddingVertical: 8,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    padding: 10,
-    fontSize: 16,
-  },
-  calendarIcon: { fontSize: 20, marginLeft: 8 },
   section: {
     marginBottom: 16, // Adds consistent spacing between sections
   },

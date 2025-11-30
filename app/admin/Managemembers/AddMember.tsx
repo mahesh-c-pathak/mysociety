@@ -2,182 +2,144 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  FlatList,
+  Alert,
   Modal,
-  Pressable,
   TouchableOpacity,
+  Pressable,
 } from "react-native";
-import { Card, Text, Button  } from "react-native-paper";
+import { Text } from "react-native-paper";
 import { db } from "@/firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
-import { useNavigation, useRouter  } from "expo-router";
+import { collectionGroup, getDocs } from "firebase/firestore";
+import { useRouter } from "expo-router";
 import { useSociety } from "@/utils/SocietyContext";
+import WingsFlatsGrid from "@/components/WingsFlatsGrid";
+import AppbarComponent from "@/components/AppbarComponent";
+import { Ionicons } from "@expo/vector-icons";
+import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+
+type FlatData = {
+  flatType: string;
+  resident: string;
+  memberStatus: string;
+  ownerRegisterd?: string;
+  renterRegisterd?: string;
+};
+type FlatsData = Record<string, Record<string, Record<string, FlatData>>>;
 
 const AddMember: React.FC = () => {
   const { societyName } = useSociety();
-  const [societyData, setSocietyData] = useState<any>(null);
-  const [selectedWing, setSelectedWing] = useState<string | null>(null);
+  useCustomBackHandler("/admin/Managemembers");
+
   const router = useRouter(); // Initialize router for navigation
-  const [loading, setLoading] = useState(true);
-  const navigation = useNavigation();
- 
+  const [loading, setLoading] = useState(false);
+
+  const customFlatsSubcollectionName = `${societyName} flats`;
+
+  const [flatsData, setFlatsData] = useState<FlatsData>({});
+  const [alreadyRegisteredOnce, setAlreadyRegisteredOnce] = useState(false);
+
+  const [userTypeModalVisible, setUserTypeModalVisible] = useState(false); // For user type selection
+
   const [selectedFlat, setSelectedFlat] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedFlatType, setSelectedFlatType] = useState<string | null>(null);
+  const [selectedWing, setSelectedWing] = useState<string | null>(null);
 
-  // Define valid status keys
-  type flatType = "Owner" | "Closed" | "Rent" | "Dead" | "Shop" |"no flatType";
-
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
-    Owner: 0,
-    Closed: 0,
-    Rent: 0,
-    Dead: 0,
-    Shop: 0,
-    "no flatType": 0,
-  });
+  const fetchFlatsData = async () => {
+    try {
+      setLoading(true);
+      const flatsQuerySnapshot = await getDocs(
+        collectionGroup(db, customFlatsSubcollectionName)
+      );
+      const data: Record<string, any> = {};
+      flatsQuerySnapshot.forEach((doc) => {
+        const flatData = doc.data();
+        const flatId = doc.id;
+        const flatPath = doc.ref.path;
+        const pathSegments = flatPath.split("/");
+        const wing = pathSegments[3];
+        const floor = pathSegments[5];
+        if (!data[wing]) data[wing] = {};
+        if (!data[wing][floor]) data[wing][floor] = {};
+        data[wing][floor][flatId] = flatData;
+      });
+      setFlatsData(data);
+    } catch (error) {
+      console.error("Error fetching flats data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    navigation.setOptions({
-      headerTitle: "Add Member",
-    });
+    fetchFlatsData();
   }, []);
 
-  useEffect(() => {
-    const fetchSocietyData = async () => {
-      try {
-        console.log('societyName', societyName)
-        const docRef = doc(db, "Societies", societyName); // Update society name as needed
-        const docSnap = await getDoc(docRef);
+  // 🧭 Handle flat card press
+  const handleFlatPress = (
+    flatId: string,
+    flatType: string,
+    floor: string,
+    wing: string
+  ) => {
+    const selectedFlatData = flatsData[wing][floor][flatId];
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setSocietyData(data.wings);
-          setSelectedWing(Object.keys(data.wings)[0]); // Default to the first wing
-          calculateStatusCounts(data.wings);
-        } else {
-          alert("Society does not exist!");
-        }
-      } catch (error) {
-        console.error("Error fetching society data:", error);
-        alert("Failed to fetch data. Please try again.");
-      } finally {
-        setLoading(false);
+    // 🧠 Common setup
+    const proceedToRegistration = (reRegister: boolean) => {
+      setSelectedWing(wing);
+      setSelectedFlat(flatId);
+      setSelectedFlatType(flatType);
+      setSelectedFloor(floor);
+      setAlreadyRegisteredOnce(reRegister);
+
+      if (flatType === "Rent") {
+        setUserTypeModalVisible(true);
+      } else {
+        router.push({
+          pathname: "/admin/Managemembers/MemberDetails",
+          params: {
+            societyName,
+            wing,
+            floorName: floor,
+            flatNumber: flatId,
+            flatType,
+            userType: "Owner",
+            alreadyRegisteredOnce: reRegister ? "true" : "false",
+          },
+        });
       }
     };
 
-    fetchSocietyData();
-  }, []);
-
-
-  const calculateStatusCounts = (wingData: any) => {
-    const counts = { Owner: 0, Closed: 0, Rent: 0, Dead: 0, Shop:0, "no flatType": 0 };
-  
-    if (wingData?.floorData) {
-      Object.values(wingData.floorData).forEach((flats: any) => {
-        Object.values(flats).forEach((flat: any) => {
-          const flatType = (flat?.flatType|| "no flatType")  as flatType; // Ensure status is a valid key
-          const normalizedFlatType = flatType.charAt(0).toUpperCase() + flatType.slice(1) as flatType;
-          counts[normalizedFlatType] = (counts[normalizedFlatType] || 0) + 1;
-          
-        });
-      });
-    }
-  
-    setStatusCounts(counts);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Owner":
-        return "#2196F3"; // Blue
-      case "Closed":
-        return "#808080"; // Grey
-      case "Rent":
-        return "#FFA500"; // Orange
-      case "Dead":
-        return "#000000"; // Black
-      case "Shop":
-        return "#FF00FF"; // Magenta
-      default:
-        return "#ffb6c1"; // light pink  for no bill
-    }
-  };
-
-  const handleFlatPress = (flatType: string, flatNumber: string) => {
-    if (flatType === "Rent") {
-      setSelectedFlat(flatNumber);
-      setShowModal(true); // Show the modal for flats with "Rent" type
+    // 🧠 Logic for flat status
+    if (selectedFlatData.memberStatus === "Registered") {
+      Alert.alert("Already Registered", "This unit is already registered.");
+      return; // ✅ Stop further execution, do not proceed
+    } else if (selectedFlatData.memberStatus === "Pending Approval") {
+      Alert.alert(
+        "Pending Approval",
+        "The registration of this unit is still under approval."
+      );
     } else {
-      router.push({
-        pathname: "/admin/Managemembers/MemberDetails",
-        params: {
-          wing: selectedWing,
-          flatNumber,
-          flatType,
-        },
-      });
+      proceedToRegistration(false);
     }
   };
 
-  const handleTypeSelect = (type: string) => {
-    setShowModal(false);
+  // 🧩 Modal navigation helper
+  const navigateToMemberDetails = (userType: "Owner" | "Renter") => {
     router.push({
       pathname: "/admin/Managemembers/MemberDetails",
       params: {
+        societyName,
         wing: selectedWing,
+        floorName: selectedFloor,
         flatNumber: selectedFlat,
-        flatType: type,
+        flatType: selectedFlatType,
+        userType,
+        alreadyRegisteredOnce: alreadyRegisteredOnce ? "true" : "false",
       },
     });
+    setUserTypeModalVisible(false);
   };
-
-  const renderFlat = ({ item, flats }: { item: string; flats: Record<string, any> }) => {
-    const flatData = flats[item];
-    const flatType = flatData.flatType;
-
-    return (
-      <Pressable onPress={() => handleFlatPress(flatType, item)}>
-        <Card
-          style={[
-            styles.card,
-            { backgroundColor: getStatusColor(flatType) },
-          ]}
-          mode="elevated"
-        >
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.cardText}>
-              {item}
-            </Text>
-          </Card.Content>
-        </Card>
-      </Pressable>
-    );
-  };
-
-
-  const renderFloor = ({ item }: { item: [string, Record<string, any>] }) => {
-    const [floor, flats] = item;
-    const flatNumbers = Object.keys(flats);
-
-    return (
-      <View>
-        <Text style={styles.floorHeading}>{floor}</Text>
-        <FlatList
-          data={flatNumbers}
-          keyExtractor={(flatNumber) => `${floor}-${flatNumber}`}
-          renderItem={({ item }) => renderFlat({ item, flats })}
-          numColumns={3}
-          contentContainerStyle={styles.flatListContent}
-        />
-      </View>
-    );
-  };
-
-  useEffect(() => {
-    if (selectedWing && societyData) {
-      calculateStatusCounts(societyData[selectedWing]); // Calculate status counts for the selected wing
-    }
-  }, [selectedWing, societyData]);
 
   if (loading) {
     return (
@@ -187,95 +149,95 @@ const AddMember: React.FC = () => {
     );
   }
 
- 
-
   return (
     <View style={styles.container}>
-    {/* Wing Selector */}
-    <View style={styles.toggleContainer}>
-      {societyData
-        ? Object.keys(societyData)
-          .sort((a, b) => a.localeCompare(b)) // Sort wings alphabetically
-          .map((wing) => (
-            <Pressable
-              key={wing}
-              onPress={() => setSelectedWing(wing)}
-              style={[
-                styles.toggleButton,
-                selectedWing === wing && styles.selectedToggle,
-              ]}
-            >
-              <Text style={styles.toggleText}>{wing}</Text>
-            </Pressable>
-          ))
-        : <Text>Loading Wings...</Text> /* Show a loading indicator or message */}
-    </View>
+      <AppbarComponent
+        title="Add Member"
+        source="Admin"
+        backRoute="/admin/Managemembers"
+      />
+      <WingsFlatsGrid
+        flatsData={flatsData}
+        onFlatPress={handleFlatPress}
+        showRegisteredLegend
+      />
 
-    {/* Legends */}
-    <View style={styles.legendsContainer}>
-        {Object.entries(statusCounts).map(([status, count]) => (
-          <View key={status}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: getStatusColor(status) }]} />
-            <Text>{`(${count})`}</Text>
+      {/* User Type Modal */}
+
+      {/* 🧩 User Type Modal */}
+      {userTypeModalVisible && (
+        <Modal
+          animationType="slide"
+          transparent
+          visible={userTypeModalVisible}
+          onRequestClose={() => setUserTypeModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setUserTypeModalVisible(false)}
+              >
+                <Ionicons name="close-circle" size={32} color="black" />
+              </TouchableOpacity>
+
+              <Text style={styles.modalTitle}>Select Type</Text>
+
+              <View style={styles.modalButtons}>
+                {/* 🏠 Owner Button */}
+                <Pressable
+                  style={[styles.button, styles.buttonYes]}
+                  onPress={() => {
+                    const flatData =
+                      flatsData[selectedWing!][selectedFloor!][selectedFlat!];
+                    if (flatData.ownerRegisterd === "Registered") {
+                      Alert.alert(
+                        "Already Registered",
+                        "This unit Owner is already registered."
+                      );
+                    } else if (flatData.ownerRegisterd === "Pending Approval") {
+                      Alert.alert(
+                        "Pending Approval",
+                        "The registration of this unit Owner is still under approval."
+                      );
+                    } else {
+                      navigateToMemberDetails("Owner");
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>Owner</Text>
+                </Pressable>
+
+                {/* 👤 Renter Button */}
+                <Pressable
+                  style={[styles.button, styles.buttonNo]}
+                  onPress={() => {
+                    const flatData =
+                      flatsData[selectedWing!][selectedFloor!][selectedFlat!];
+                    if (flatData.ownerRegisterd !== "Registered") {
+                      Alert.alert(
+                        "Owner Should Register First",
+                        "The owner of this unit must register before proceeding."
+                      );
+                    } else {
+                      navigateToMemberDetails("Renter");
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>Renter</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
-          <Text>{`${status.charAt(0).toUpperCase() + status.slice(1)}`}</Text>
-          </View>
-           
-        ))}
-      </View>
-    
-    {/* Floor Data */}
-    {selectedWing && societyData[selectedWing]?.floorData ? (
-        <FlatList
-          data={Object.entries(societyData[selectedWing].floorData).sort(
-            ([floorA], [floorB]) => {
-              // Extract the numeric part of the floor names (e.g., "Floor 1", "Floor 2")
-              const numA = parseInt(floorA.replace(/\D/g, ""), 10);
-              const numB = parseInt(floorB.replace(/\D/g, ""), 10);
-              return numA - numB; // Sort numerically in ascending order
-            }
-          ) as [string, Record<string, any>][]} // Type assertion here} 
-          keyExtractor={([floor]) => floor}
-          renderItem={renderFloor}
-          contentContainerStyle={styles.flatListContent}
-        />
-      ) : (
-        <Text style={styles.info}>
-          No floor data available for Wing {selectedWing}.
-        </Text>
+        </Modal>
       )}
-
-      {/* Modal for selecting type */}
-      <Modal visible={showModal} transparent animationType="fade">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Type</Text>
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: "#6200EE" }]}
-              onPress={() => handleTypeSelect("Owner")}
-            >
-              <Text style={styles.modalButtonText}>Owner</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: "#FFA500" }]}
-              onPress={() => handleTypeSelect("Rent")}
-            >
-              <Text style={styles.modalButtonText}>Rent</Text>
-            </TouchableOpacity>
-            <Button onPress={() => setShowModal(false)}>Cancel</Button>
-          </View>
-        </View>
-      </Modal>
-
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
     backgroundColor: "#fff",
   },
   heading: {
@@ -284,105 +246,58 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: "center",
   },
-  legendsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    marginBottom: 16,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  legendColor: {
-    width: 16,
-    height: 16,
-    marginRight: 8,
-    borderRadius: 8,
-  },
-  toggleContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  toggleButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-  },
-  selectedToggle: {
-    backgroundColor: "#6200ee",
-  },
-  toggleText: {
-    color: "#000",
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  floorHeading: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  info: {
-    fontSize: 16,
-    textAlign: "center",
-    marginVertical: 16,
-  },
-  flatListContent: {
-    paddingHorizontal: 8,
-  },
-  card: {
-    margin: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 8,
-    elevation: 2,
-  },
-  cardText: {
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "bold",
-    color: '#fff',
-  },
-  amountText: {
-    textAlign: "center",
-    fontWeight: "bold",
-    marginTop: 4,
-  },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)", // Dimmed background
   },
   modalContent: {
-    width: 300,
-    padding: 16,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    alignItems: "center",
+    width: "80%", // Adjust modal width
+    backgroundColor: "#fff", // Modal background color
+    borderRadius: 10, // Rounded corners
+    padding: 20, // Inner padding
+    alignItems: "center", // Center content horizontally
+    shadowColor: "#000", // Shadow for iOS
+    shadowOffset: { width: 0, height: 2 }, // Shadow position
+    shadowOpacity: 0.25, // Shadow transparency
+    shadowRadius: 4, // Shadow blur radius
+    elevation: 5, // Shadow for Android
+  },
+  closeButton: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    borderRadius: 20,
+    padding: 5,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 16,
+    marginBottom: 15,
+    textAlign: "center",
   },
-  modalButton: {
+  modalButtons: {
+    flexDirection: "row", // Arrange buttons horizontally
+    justifyContent: "space-around", // Space between buttons
     width: "100%",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 8,
   },
-  modalButtonText: {
-    fontSize: 16,
+  button: {
+    padding: 10,
+    borderRadius: 5,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  buttonYes: {
+    backgroundColor: "#2196F3", // Blue for Yes
+  },
+  buttonNo: {
+    backgroundColor: "#FFA500", // Orange for No
+  },
+  buttonText: {
     color: "#fff",
     fontWeight: "bold",
   },
-  
 });
-
 
 export default AddMember;

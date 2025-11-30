@@ -8,11 +8,13 @@ const PaymentDatePicker = ({
   initialDate,
   onDateChange,
   minimumDate, // Optional prop
+  maximumDate, // ✅ added Optional prop
   placeholder = "YYYY-MM-DD", // 👈 added optional placeholder
 }: {
   initialDate?: Date | null; // 👈 allow null
   onDateChange: (date: Date) => void;
   minimumDate?: Date; // Added optional minimumDate
+  maximumDate?: Date; // ✅ added optional maximumDate
   placeholder?: string;
 }) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(
@@ -64,6 +66,7 @@ const PaymentDatePicker = ({
           display="default"
           onChange={handleDateChange}
           minimumDate={minimumDate} // Apply minimumDate only if provided
+          maximumDate={maximumDate} // ✅ enforce upper bound only if provided
         />
       )}
     </View>

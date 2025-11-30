@@ -26,7 +26,8 @@ import {
 } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons"; // Using Expo vector icons
 import { useAuthRole } from "@/lib/authRole";
-
+import { sendInAppMessage } from "@/utils/sendInAppMessage";
+import { fetchAdminIds } from "@/utils/fetchAdminIds";
 
 // Define the structure of flatsData
 type FlatData = {
@@ -55,10 +56,12 @@ type UserDetails = {
     userStatus: string;
     userType: string;
     userEmail: string;
+    usermobileNumber?: string; // 👈 new field
+    active?: boolean;
     expoPushToken?: string; // 👈 new field
   };
 };
- 
+
 const JoinWing = () => {
   const router = useRouter();
   const { mysocietyName } = useLocalSearchParams();
@@ -68,11 +71,8 @@ const JoinWing = () => {
   const userId = user?.uid;
 
   const navigation = useNavigation();
-  
 
- 
   const customFlatsSubcollectionName = `${mysocietyName} flats`;
-  
 
   const [selectedWing, setSelectedWing] = useState<string | null>(null);
 
@@ -232,11 +232,13 @@ const JoinWing = () => {
       // Initialize variables
       let userName: string = userId; // Default userName to userId
       let userEmail: string = "";
+      let usermobileNumber: string = "";
 
       if (userDocSnap.exists()) {
         const userData = userDocSnap.data();
-        userName = userData.name || userData.firstName || userId; // Use the outer userName variable
+        userName = userData.displayName || userData.firstName || userId; // Use the outer userName variable
         userEmail = userData.email; // Get the user email
+        usermobileNumber = userData.mobileNumber;
         const mySociety = userData.mySociety || [];
 
         const societyIndex = mySociety.findIndex(
@@ -341,7 +343,26 @@ const JoinWing = () => {
         userType,
         FlatType,
         userEmail,
-        
+        usermobileNumber
+      );
+
+      // 🔹 Send in-app message to all admins only
+      const adminIds = await fetchAdminIds(mysocietyName as string);
+
+      const title = `New member added ${wingname} ${flatnumber} ${userName}`;
+      const body = "View details of the user and activate account";
+
+      await Promise.all(
+        adminIds.map((adminId) =>
+          sendInAppMessage(
+            mysocietyName as string,
+            adminId,
+            title,
+            body,
+            "member_added",
+            `/admin/Managemembers` // 🔹 optional path
+          )
+        )
       );
 
       Alert.alert(
@@ -370,39 +391,50 @@ const JoinWing = () => {
     if (!selectedWing || !flatsData[selectedWing]) return null;
 
     return (
-      <View style={styles.outerscrollContent}>
-        <ScrollView horizontal style={styles.scrollView}>
-          <View style={styles.scrollContent}>
-            {Object.keys(flatsData[selectedWing]).map((floor) => (
-              <View key={floor} style={styles.floorContainer}>
-                <View style={styles.row}>
-                  {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
-                    const flatData = flatsData[selectedWing][floor][flat];
-                    const flatColor =
-                      flatData.memberStatus === "Registered"
-                        ? "#2E8B57" // Green for registered
-                        : flatColors[flatData.flatType] || flatColors["owner"]; // Default to owner color if flatType is missing
-                    return (
-                      <TouchableOpacity
-                        key={flat}
-                        style={[
-                          styles.flatContainer,
-                          { backgroundColor: flatColor },
-                        ]}
-                        onPress={() =>
-                          handleFlatPress(flat, flatData.flatType, floor)
+      <ScrollView style={styles.verticalScroll}>
+        <View style={styles.outerscrollContent}>
+          <ScrollView horizontal style={styles.scrollView}>
+            <View style={styles.scrollContent}>
+              {Object.keys(flatsData[selectedWing])
+                .sort((a, b) => {
+                  const numA = parseInt(a.replace(/\D/g, "")) || 0;
+                  const numB = parseInt(b.replace(/\D/g, "")) || 0;
+                  return numB - numA; // Sort descending (top → bottom)
+                })
+                .map((floor) => (
+                  <View key={floor} style={styles.floorContainer}>
+                    <View style={styles.row}>
+                      {Object.keys(flatsData[selectedWing][floor]).map(
+                        (flat) => {
+                          const flatData = flatsData[selectedWing][floor][flat];
+                          const flatColor =
+                            flatData.memberStatus === "Registered"
+                              ? "#2E8B57" // Green for registered
+                              : flatColors[flatData.flatType] ||
+                                flatColors["owner"]; // Default to owner color if flatType is missing
+                          return (
+                            <TouchableOpacity
+                              key={flat}
+                              style={[
+                                styles.flatContainer,
+                                { backgroundColor: flatColor },
+                              ]}
+                              onPress={() =>
+                                handleFlatPress(flat, flatData.flatType, floor)
+                              }
+                            >
+                              <Text style={styles.flatText}>{flat}</Text>
+                            </TouchableOpacity>
+                          );
                         }
-                      >
-                        <Text style={styles.flatText}>{flat}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+                      )}
+                    </View>
+                  </View>
+                ))}
+            </View>
+          </ScrollView>
+        </View>
+      </ScrollView>
     );
   };
 
@@ -417,7 +449,7 @@ const JoinWing = () => {
     userType: string,
     flatType: string,
     userEmail: string,
-    
+    usermobileNumber: string
   ) => {
     try {
       const flatRef = doc(
@@ -444,15 +476,15 @@ const JoinWing = () => {
       if (currentDetails[userId]) {
         currentDetails[userId].userStatus = approvalStatus; // Update status
         currentDetails[userId].userType = userType; // Update userType if needed
-        
       } else {
         // Add a new user if userId doesn't exist
         currentDetails[userId] = {
           userName,
           userStatus: approvalStatus,
           userType,
-          userEmail
-          
+          userEmail,
+          usermobileNumber,
+          active: false,
         };
       }
 
@@ -681,7 +713,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   header: {
-    backgroundColor: "#0288d1", // Match background color from the attached image
+    backgroundColor: "#2196F3", // Match background color from the attached image
     elevation: 4,
   },
   titleStyle: {
@@ -721,10 +753,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  flatList: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
 
   flatText: {
     color: "#FFFFFF",
@@ -756,11 +784,7 @@ const styles = StyleSheet.create({
   floorContainer: {
     marginBottom: 8,
   },
-  floorTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
+
   row: {
     flexDirection: "row", // Flats in a row
   },
@@ -797,12 +821,6 @@ const styles = StyleSheet.create({
   },
   legendcountContainer: {
     flexDirection: "row",
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
 
   modalContainer: {
@@ -861,5 +879,10 @@ const styles = StyleSheet.create({
     right: 5,
     borderRadius: 20,
     padding: 5,
+  },
+  verticalScroll: {
+    flex: 1,
+    marginHorizontal: 16,
+    marginBottom: 60,
   },
 });

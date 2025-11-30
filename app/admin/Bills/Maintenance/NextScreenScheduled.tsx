@@ -54,6 +54,7 @@ const NextScreenScheduled = () => {
   // const customFloorsSubcollectionName = `${societyName} floors`;
   // const customFlatsSubcollectionName = `${societyName} flats`;
   // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = "flatbills";
 
   // const specialBillCollectionName = `specialBills_${societyName}`;
   // const scheduledBillCollectionName = `scheduledBills_${societyName}`;
@@ -108,12 +109,15 @@ const NextScreenScheduled = () => {
       try {
         data = JSON.parse(text);
       } catch (err) {
+        const error = err as Error;
+        console.log("err in scheduled bill handleGenerateBill", error);
         console.error("Non-JSON response:", text);
         throw new Error("Server did not return JSON");
       }
       if (data.success) {
         // Clear AsyncStorage
         await AsyncStorage.removeItem("@createdBillItem");
+        await AsyncStorage.removeItem("@scheduleBillForm");
         Alert.alert(
           "Success",
           `Bill ${data.billNumber} created successfully!`,
@@ -184,6 +188,8 @@ const NextScreenScheduled = () => {
       try {
         data = JSON.parse(text);
       } catch (err) {
+        const error = err as Error;
+        console.log("err in scheduled bill handleScheduleBillCronJob", error);
         console.error("Non-JSON response from createBillCronJob:", text);
         throw new Error("Server did not return valid JSON");
       }
@@ -191,6 +197,7 @@ const NextScreenScheduled = () => {
       if (res.ok) {
         Alert.alert("Success", "Bill Cron Job scheduled every 5 minutes 🚀");
         await AsyncStorage.removeItem("@createdBillItem");
+        await AsyncStorage.removeItem("@scheduleBillForm");
         router.replace("/admin/Bills/Maintenance");
       } else {
         Alert.alert("Error", data?.error || "Failed to schedule cron job.");
@@ -215,7 +222,12 @@ const NextScreenScheduled = () => {
     <>
       {/* Top Appbar */}
       <AppbarComponent title={name as string} source="Admin" />
-      <ScrollView style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{
+          paddingBottom: 100, // 👈 add enough gap for footer + FAB
+        }}
+      >
         <View>
           <Text style={styles.header}>General Details</Text>
           <Text>Name: {name}</Text>

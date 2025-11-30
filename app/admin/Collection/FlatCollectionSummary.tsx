@@ -16,6 +16,7 @@ import {
   where,
   orderBy,
   limit,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import {
@@ -31,6 +32,7 @@ import {
 } from "react-native-paper";
 
 import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+import { getFlatCurrentBalance } from "@/utils/getFlatCurrentBalance";
 
 interface BillItem {
   itemName: string;
@@ -62,6 +64,7 @@ interface UnclearedBalance {
   selectedIds: any;
   selectedBillsProperties: any;
   privateFilePath?: string; // ✅ add this
+  userIds?: string[]; // ✅ Add this
 }
 
 const FlatCollectionSummary = () => {
@@ -87,9 +90,12 @@ const FlatCollectionSummary = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   useEffect(() => {
     fetchBills();
@@ -123,6 +129,13 @@ const FlatCollectionSummary = () => {
       });
       setBills(billsData);
 
+      // get the flat users
+      const flatDocSnap = await getDoc(flatDocRef);
+      const flatDetails = flatDocSnap.data();
+
+      const userDetails = flatDetails?.userDetails || {};
+      const userIds = Object.keys(userDetails); // ✅ Extract only user IDs (keys)
+
       // Process uncleared balances
       // Reference to the uncleared balance subcollection
       const unclearedBalanceRef = collection(
@@ -132,7 +145,11 @@ const FlatCollectionSummary = () => {
 
       // Query to fetch all documents with status "Uncleared"
       const querySnapshot = await getDocs(
-        query(unclearedBalanceRef, where("status", "==", "Uncleared"))
+        query(
+          unclearedBalanceRef,
+          where("societyName", "==", societyName),
+          where("status", "==", "Uncleared")
+        )
       );
 
       // Extract and typecast document data
@@ -151,6 +168,7 @@ const FlatCollectionSummary = () => {
             selectedIds: data.selectedIds || [],
             selectedBillsProperties: data.selectedBills || [],
             privateFilePath: data.privateFilePath,
+            userIds, // ✅ include flat’s userIds
           };
         }
       );
@@ -179,23 +197,12 @@ const FlatCollectionSummary = () => {
         setDeposit(data.cumulativeBalance); // Use cumulativeBalance or default to 0
       }
       // setCurrentBalance(relevantWing.currentBalance || 0);
-      const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
-      const currentBalanceSubcollection = collection(
-        flatDocRef,
-        currentBalanceSubcollectionName
-      );
+      // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
 
-      const currentBalancequery = query(
-        currentBalanceSubcollection,
-        where("date", "<=", dateString),
-        orderBy("date", "desc"),
-        limit(1)
-      );
-      const currentBalancesnapshot = await getDocs(currentBalancequery);
-      if (!currentBalancesnapshot.empty) {
-        const data = currentBalancesnapshot.docs[0].data();
-        setCurrentBalance(data.cumulativeBalance); // Use cumulativeBalance or default to 0
-      }
+      // const currentBalanceSubcollectionName = "flatCurrentBalance";
+      // Read current balance (read only; safe in parallel)
+      const currentFlatBalanceValue = await getFlatCurrentBalance(flatRef);
+      setCurrentBalance(currentFlatBalanceValue);
     } catch (error) {
       console.error("Error fetching bills:", error);
     }
@@ -314,6 +321,7 @@ const FlatCollectionSummary = () => {
               item.selectedBillsProperties
             ),
             privateFilePath: item.privateFilePath || "", // ✅ now sending
+            userIds: JSON.stringify(item.userIds || []), // ✅ pass userIds here
             // Add other necessary params if available
           },
         });
@@ -516,7 +524,7 @@ const FlatCollectionSummary = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2196F3" },
+  header: { backgroundColor: "#6200ee" },
   titleStyle: {
     color: "#fff",
     fontSize: 18,
@@ -526,7 +534,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "#2196F3",
+    backgroundColor: "#6200ee",
   },
   summaryItem: { alignItems: "center" },
   summaryTitle: { color: "white", fontSize: 12 },
@@ -550,7 +558,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-    backgroundColor: "#2196F3",
+    backgroundColor: "#6200ee",
   },
   profileText: {
     fontSize: 14,
@@ -560,9 +568,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatar: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#6200ee",
     marginRight: 10,
     borderColor: "#fff",
+    borderWidth: 2, // 👈 Add this
   },
   unclearedStatusContainer: {
     backgroundColor: "#333",
@@ -594,17 +603,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginVertical: 16,
-  },
-
   actionsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    backgroundColor: "#2196F3",
+    backgroundColor: "#6200ee",
     padding: 10,
   },
   actionButton: {
@@ -630,11 +633,10 @@ const styles = StyleSheet.create({
   activeActionText: {
     color: "#2196F3",
   },
-  divider: { color: "#fff" },
   actionButtonview: {
     width: 60,
     right: 0,
-    top: 70,
+    top: 60,
     position: "absolute",
     marginHorizontal: 10,
     paddingVertical: 4,

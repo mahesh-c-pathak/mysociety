@@ -27,21 +27,20 @@ export const getBillItemsLedger = async (
   }[]
 > => {
   try {
-    const specialBillCollectionName = `specialBills_${societyName}`;
-    const scheduledBillCollectionName = `scheduledBills_${societyName}`;
+    // const specialBillCollectionName = `specialBills_${societyName}`;
+    // const scheduledBillCollectionName = `scheduledBills_${societyName}`;
     // ✅ Decide which collection to use
+    {
+      /** 
     const collectionName =
       billType === "scheduled"
         ? scheduledBillCollectionName
         : specialBillCollectionName;
 
-    const billDocRef = doc(
-      db,
-      "Societies",
-      societyName,
-      collectionName,
-      billNumber
-    ); // Reference to the bill document
+    */
+    }
+
+    const billDocRef = doc(db, "Bills", billNumber); // Reference to the bill document
     const billSnapshot = await getDoc(billDocRef);
 
     if (!billSnapshot.exists()) {

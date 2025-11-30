@@ -1,5 +1,4 @@
-
-import React, {  useState } from "react";
+import React, { useState } from "react";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import {
   View,
@@ -9,7 +8,7 @@ import {
   TouchableWithoutFeedback,
   Alert,
 } from "react-native";
-import {  Avatar} from "react-native-paper";
+import { Avatar } from "react-native-paper";
 import AppbarComponent from "@/components/AppbarComponent";
 import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 import { useSociety } from "@/utils/SocietyContext";
@@ -61,11 +60,13 @@ const VoucherDetails = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
-  const specialBillCollectionName = `specialBills_${societyName}`;
+  //const specialBillCollectionName = `specialBills_${societyName}`;
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const totalAmountToPay = parsedselectedBills.reduce(
     (sum: number, bill: { amountToPay?: number }) =>
@@ -103,7 +104,9 @@ const VoucherDetails = () => {
                 for (const item of parsedSelectedIds) {
                   console.log("Paid For bill No.", item);
 
-                  const mainBillRef = `Societies/${societyName}/${specialBillCollectionName}/${item}`;
+                  // const mainBillRef = `Societies/${societyName}/${specialBillCollectionName}/${item}`;
+
+                  const mainBillRef = `Bills/${item}`;
                   const mainBillDocRef = doc(db, mainBillRef);
 
                   const flatBillRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flatNumber}/${customFlatsBillsSubcollectionName}/${item}`;
@@ -186,8 +189,8 @@ const VoucherDetails = () => {
                         flatType === "Closed"
                           ? billSubItem.closedUnitAmount
                           : flatType === "Rent"
-                          ? billSubItem.rentAmount
-                          : billSubItem.ownerAmount;
+                            ? billSubItem.rentAmount
+                            : billSubItem.ownerAmount;
 
                       // Update item ledger and account receivable. Date is current date when voucher is deleted
                       const ledgerUpdateBillSubItem = await updateLedger(
@@ -242,7 +245,8 @@ const VoucherDetails = () => {
                 const operationType = type === "Refund" ? "Add" : "Subtract";
 
                 // Logic to Update Current Balance for the Flat,  for refund need to "Add" as refund deleted means money came back
-                const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+                // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+                const currentBalanceSubcollectionName = "flatCurrentBalance";
                 const currentbalanceCollectionRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flatNumber}/${currentBalanceSubcollectionName}`;
                 const currentbalanceCollectionDocRef = collection(
                   db,
@@ -252,7 +256,8 @@ const VoucherDetails = () => {
                   currentbalanceCollectionDocRef,
                   currentBalance,
                   operationType,
-                  currentDate
+                  currentDate,
+                  societyName
                 );
                 console.log("Current Balance update result:", result);
 
@@ -438,8 +443,6 @@ export default VoucherDetails;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  headerCard: { backgroundColor: "#673AB7", padding: 16, borderRadius: 8 },
-  headerContent: { flexDirection: "row", alignItems: "center" },
   content: { alignItems: "flex-start", justifyContent: "center" },
   rowContainer: {
     flexDirection: "row",
@@ -447,9 +450,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  flatText: { fontSize: 18, fontWeight: "bold", color: "#fff" },
-  nameText: { fontSize: 16, color: "#fff", marginTop: 4 },
-  contactText: { fontSize: 14, color: "#EDE7F6", marginTop: 2 },
   infoContainer: { padding: 16 },
   transactionText: { fontSize: 14, marginBottom: 8, color: "#333" },
   label: { fontWeight: "bold" },
@@ -474,8 +474,6 @@ const styles = StyleSheet.create({
   },
   paymentDescription: { fontSize: 14, color: "#333" },
   paymentAmountNegative: { fontSize: 14, color: "#F44336", fontWeight: "bold" },
-  invoiceText: { fontSize: 12, color: "#757575", marginTop: 4 },
-  divider: { marginVertical: 8 },
   // balanceCard: { backgroundColor: "#E0E0E0", padding: 16, alignItems: "center", marginTop: 16,  },
   balanceCard: {
     backgroundColor: "#fff",
@@ -490,15 +488,6 @@ const styles = StyleSheet.create({
   },
   balanceText: { fontSize: 16, fontWeight: "bold", color: "#333" },
 
-  appbar: {
-    backgroundColor: "#5e35b1", // Consistent background color
-    elevation: 0, // Removes shadow
-  },
-  titleStyle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
   avatar: {
     backgroundColor: "#7e57c2", // Match avatar background
     marginRight: 10,
@@ -520,12 +509,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderBottomLeftRadius: 15,
     borderBottomRightRadius: 15,
-  },
-  headerText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
-    textAlign: "center",
   },
   downloadButton: {
     backgroundColor: "#673AB7",

@@ -76,7 +76,7 @@ const BillsScreen = () => {
   return (
     <View style={styles.container}>
       {/* Top Appbar */}
-      <AppbarComponent title="Bills" source="Admin" />
+      <AppbarComponent title="Bills" source="Admin" backRoute="/admin" />
 
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {options.map((option, index) => (
@@ -105,15 +105,11 @@ const BillsScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  header: { backgroundColor: "#6200ee" },
-  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
-  scrollcontainer: {
-    padding: 10,
-  },
 
   scrollContainer: {
     paddingHorizontal: 10,
     paddingVertical: 16,
+    paddingBottom: 80,
   },
   card: {
     backgroundColor: "#fff",

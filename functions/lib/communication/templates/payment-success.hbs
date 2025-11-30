@@ -1,0 +1,136 @@
+<html>
+  <head>
+    <meta charset='utf-8' />
+    <title>Payment Successful</title>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f7f7f7;
+        font-family: Arial, sans-serif;
+      }
+
+      .email-container {
+        width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 30px 40px;
+        box-sizing: border-box;
+      }
+
+      .header-image {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .header-image img {
+        width: 160px;
+      }
+
+      h2 {
+        text-align: center;
+        margin: 0;
+        margin-top: 10px;
+        font-size: 22px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .content {
+        margin-top: 30px;
+        font-size: 15px;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #eaeaea;
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        font-size: 14px;
+        color: #333;
+      }
+
+      .footer-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .footer-item img {
+        width: 18px;
+      }
+
+      .queries-label {
+        text-align: center;
+        margin-top: 25px;
+        font-size: 14px;
+        color: #777;
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <div class='email-container'>
+
+      <!-- Header Image -->
+      <div class='header-image'>
+        <img src='cid:headerImage' alt='header' />
+      </div>
+
+      <!-- Title -->
+      <h2>Payment Successful</h2>
+
+      <!-- Content -->
+      <div class='content'>
+
+        <p>Dear {{name}},</p>
+
+        <p>
+          Your payment of
+          <strong>₹{{amount}}</strong>
+          for
+          <strong>{{chargeType}}</strong>
+          on
+          <strong>{{paymentDate}}</strong>
+          is successful.
+        </p>
+
+        <p>
+          The bill was raised against your apartment
+          <strong>{{flat}}</strong>,
+          <strong>{{societyName}}</strong>.
+        </p>
+
+        <p>
+          You can access the receipt for this transaction in your app under
+          <strong>Ledgers → Payments</strong>
+          section. Or download the receipt attached in the email.
+        </p>
+
+      </div>
+
+      <!-- Footer -->
+      <div class='queries-label'>Queries?</div>
+
+      <div class='footer'>
+        <div class='footer-item'>
+          <img src='cid:phoneIcon' alt='phone' />
+          <span>{{supportPhone}}</span>
+        </div>
+
+        <div class='footer-item'>
+          <img src='cid:emailIcon' alt='email' />
+          <span>{{supportEmail}}</span>
+        </div>
+      </div>
+
+    </div>
+
+  </body>
+</html>

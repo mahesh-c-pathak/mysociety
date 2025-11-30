@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, Text, Alert, StyleSheet, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { db } from "@/firebaseConfig";
-import { doc, getDoc, collection, updateDoc } from "firebase/firestore";
+import { doc, getDoc, collection, updateDoc, setDoc } from "firebase/firestore";
 import { GenerateVoucherNumber } from "@/utils/generateVoucherNumber";
 import { updateLedger } from "../../../utils/updateLedger";
 import { getBillItemsLedger } from "../../../utils/getBillItemsLedger";
@@ -34,8 +34,12 @@ export default function Success() {
   const [ledgerAccount, setledgerAccount] = useState<any>("Bank");
   const [groupTo, setGroupTo] = useState<string>("Bank Accounts");
 
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+
+  const customFlatsBillsSubcollectionName = "flatbills";
+
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const extractFlatDetails = (flatRef: string) => {
     const parts = flatRef.split("/");
@@ -285,6 +289,51 @@ export default function Success() {
           ); // Update Ledger
 
           console.log("Bill Receipt Final ledger update ", LedgerUpdate);
+
+          {
+            /** added uncleared balance */
+          }
+
+          const flatDocRef = doc(db, flatRef as string);
+          const unclearedBalanceSubcollectionName = "unclearedBalances";
+          const unclearedBalanceRef = collection(
+            flatDocRef,
+            unclearedBalanceSubcollectionName
+          );
+
+          // Define document fields
+          const docData = {
+            amount: receiptAmountValue,
+            societyName: societyName,
+            status: "Cleared",
+            amountReceived: receiptAmountValue,
+            paymentReceivedDate: formattedDate, // Save formatted date,
+            paymentMode: "Online", // Add payment mode
+            transactionId,
+            selectedIds: selectedIds ? JSON.parse(selectedIds as string) : [],
+            selectedBills: selectedBills
+              ? JSON.parse(selectedBills as string)
+              : [],
+            ledgerAccount,
+            ledgerAccountGroup: groupTo,
+            voucherNumber: billreceiptVoucherNumber,
+            type: "Bill Paid",
+            origin: "Bill Settelment",
+          };
+
+          // Keep generating a new transactionId if it already exists
+          let docRef = doc(unclearedBalanceRef, transactionId);
+          let docSnap = await getDoc(docRef);
+
+          while (docSnap.exists()) {
+            transactionId = generateTransactionId(); // Generate a new ID
+            docRef = doc(unclearedBalanceRef, transactionId); // Update docRef
+            docSnap = await getDoc(docRef); // Check again
+          }
+
+          // Set the document once we have a unique transactionId
+          await setDoc(docRef, docData);
+          console.log("Uncleared Balance Document created successfully.");
         } else {
           // ---------------------------
           // Case 2: Advance payment
@@ -305,26 +354,34 @@ export default function Success() {
               unclearedBalanceSubcollectionName,
               transactionId as string
             );
-            const docSnap = await getDoc(unclearedBalanceDocRef);
+            // Define document fields
+            const docData = {
+              amount: receiptValue,
+              societyName: societyName,
+              status: "Cleared",
+              amountReceived: receiptValue,
+              paymentReceivedDate: formattedDate, // Save formatted date,
+              paymentMode: "Online", // Add payment mode
+              ledgerAccount,
+              transactionId,
+              ledgerAccountGroup: groupTo,
+              voucherNumber: memberAdvanceVoucherNumber,
+              isDeposit: false,
+              origin: "Member entered Advance",
+              type: "Advance",
+            };
 
-            if (docSnap.exists()) {
-              await updateDoc(unclearedBalanceDocRef, {
-                status: "Cleared",
-                amountReceived: receiptValue,
-                paymentReceivedDate: formattedDate, // Save formatted date,
-                ledgerAccount,
-                voucherNumber: memberAdvanceVoucherNumber,
-                isDeposit: false,
-                origin: "Member entered Advance",
-                type: "Advance",
-                ledgerAccountGroup: groupTo,
-              });
-            }
+            // Set the document once we have a unique transactionId
+            await setDoc(unclearedBalanceDocRef, docData);
+            console.log(
+              "Uncleared Balance Document for advance created successfully."
+            );
 
             // Logic to save Advance Entry and Update Current Balance for the Flat
 
             try {
-              const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+              // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+              const currentBalanceSubcollectionName = "flatCurrentBalance";
               const currentbalanceCollectionRef = collection(
                 db,
                 flatRef as string,
@@ -335,7 +392,8 @@ export default function Success() {
                 currentbalanceCollectionRef,
                 receiptAmountValue as number, //parseFloat(receiptAmount as string),
                 "Add",
-                formattedDate
+                formattedDate,
+                societyName as string
               );
 
               console.log("Balance update result:", result);
@@ -473,10 +531,6 @@ export default function Success() {
   );
 }
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
   loaderContainer: {
     flex: 1,
     justifyContent: "center",

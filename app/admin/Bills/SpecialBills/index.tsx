@@ -7,16 +7,18 @@ import {
   Pressable,
   TouchableWithoutFeedback,
 } from "react-native";
-import { TextInput, Button, Card, FAB, Surface } from "react-native-paper";
+import { Button, FAB, Divider } from "react-native-paper";
 import { useRouter } from "expo-router";
 
-import { collection, getDocs, collectionGroup } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import AppbarComponent from "@/components/AppbarComponent";
 import MenuComponent from "@/components/AppbarMenuComponent";
 import { useSociety } from "@/utils/SocietyContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+import DateRangePicker from "@/components/DateRangePicker";
+import { getCurrentFinancialYear } from "@/utils/financialYearHelpers";
 
 interface BillData {
   id: string;
@@ -24,79 +26,91 @@ interface BillData {
   date: string;
   unpaidAmount: number;
   paidAmount: number;
+  createdBy: string;
 }
 
 const GenerateSpecialBills = () => {
   const insets = useSafeAreaInsets();
   const { societyName } = useSociety();
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  // const [startDate, setStartDate] = useState("");
+  // const [endDate, setEndDate] = useState("");
   const router = useRouter();
   useCustomBackHandler("/admin/Bills"); // back always goes to Screen3
 
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
 
-  const specialBillCollectionName = `specialBills_${societyName}`;
+  // const customFlatsBillsSubcollectionName = "flatbills";
+
+  //const specialBillCollectionName = `specialBills_${societyName}`;
+  // const customWingsSubcollectionName = `${societyName} wings`;
+  //const customFloorsSubcollectionName = `${societyName} floors`;
+  // const customFlatsSubcollectionName = `${societyName} flats`;
+
+  const { startDate, endDate } = getCurrentFinancialYear(); // returns start and end of current FY
+
+  // Get the current date and set it to the 1st of the current month
+  const getFirstDayOfMonth = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  };
+  const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
+
+  const [toDate, setToDate] = useState(new Date(Date.now()));
 
   const [bills, setBills] = useState<BillData[]>([]);
 
   useEffect(() => {
-    fetchBills();
+    fetchBills(fromDate, toDate);
   }, []);
 
-  const fetchBills = async () => {
+  const fetchBills = async (from: Date, to: Date) => {
     console.log("societyName", societyName);
     try {
-      // Fetch bills from the "bills" collection
-      const billsSnapshot = await getDocs(
-        collection(db, "Societies", societyName, specialBillCollectionName)
+      // 1. Query master bills
+      const billsRef = collection(db, "Bills");
+
+      const q = query(
+        billsRef,
+        where("societyName", "==", societyName),
+        where("billType", "==", "Special Bill"),
+        where("createdAt", ">=", from),
+        where("createdAt", "<=", to),
+        orderBy("createdAt", "desc")
       );
 
-      const billsData: BillData[] = [];
+      const billsSnapshot = await getDocs(q);
 
-      // Iterate through each bill document
+      const finalBills: BillData[] = [];
+
+      // 2. Loop each bill
       for (const billDoc of billsSnapshot.docs) {
         const bill = billDoc.data();
 
-        // Filter for "Special Bill"
-        if (bill.billType !== "Special Bill") continue;
+        // Safety
+        if (!bill.members || !bill.billNumbers) continue;
 
-        const { billNumber, startDate, name } = bill;
+        const {
+          invoiceDate,
+          name,
+          createdBy,
+          totalBillAmount,
+          totalPaidAmount,
+        } = bill;
+        const totalUnpaidAmount = totalBillAmount - totalPaidAmount;
 
-        let unpaidAmount = 0;
-        let paidAmount = 0;
-
-        // create the bill path ref
-        const flatsBillSnapshot = await getDocs(
-          collectionGroup(db, customFlatsBillsSubcollectionName)
-        );
-        flatsBillSnapshot.forEach((doc) => {
-          const flatbillId = doc.id;
-          if (flatbillId === billNumber) {
-            const billsPerFlatData = doc.data();
-            const amount = billsPerFlatData.amount;
-            const status = billsPerFlatData.status;
-
-            if (status === "unpaid" || status === "Pending Approval") {
-              unpaidAmount += amount;
-            } else if (status === "paid") {
-              paidAmount += amount;
-            }
-          }
-        });
-
-        // Push the aggregated bill data
-        billsData.push({
+        // 5. Push final bill card data
+        finalBills.push({
           id: billDoc.id,
           title: name,
-          date: startDate,
-          unpaidAmount,
-          paidAmount,
+          date: invoiceDate,
+          paidAmount: totalPaidAmount,
+          unpaidAmount: totalUnpaidAmount,
+          createdBy,
         });
       }
 
-      // Update state with the fetched bills data
-      setBills(billsData);
+      // 6. Update state once
+      setBills(finalBills);
     } catch (error) {
       console.error("Error fetching bills:", error);
     }
@@ -111,25 +125,48 @@ const GenerateSpecialBills = () => {
         })
       }
     >
-      <Surface style={styles.billCard}>
-        <Card>
-          <Card.Content>
-            <View style={styles.cardHeader}>
-              <Text style={styles.billTitle}>{item.title}</Text>
-              <View style={styles.amountContainer}>
-                <Text style={styles.paidAmount}>
-                  ₹ {item.paidAmount.toFixed(2)}
-                </Text>
-                <Text style={styles.unpaidAmount}>
-                  ₹ {item.unpaidAmount.toFixed(2)}
-                </Text>
-              </View>
+      <View style={styles.billCardContainer}>
+        <View style={styles.billCardInner}>
+          <Text style={styles.billTitle}>{item.title}</Text>
+
+          {/* Row: Date + User */}
+          <View style={styles.rowBetween}>
+            <View style={styles.row}>
+              <Text style={styles.icon}>📅</Text>
+              <Text style={styles.dateText}>{item.date}</Text>
             </View>
-            <Text style={styles.billDate}>{item.date}</Text>
-            <Text style={styles.billCreator}>Created By: Mahesh Pathak</Text>
-          </Card.Content>
-        </Card>
-      </Surface>
+
+            <View style={styles.row}>
+              <Text style={styles.icon}>👤</Text>
+              <Text style={styles.personText}>{item.createdBy}</Text>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* PAID / UNPAID / TOTAL */}
+          <View style={styles.amountRow}>
+            <View style={styles.amountBlock}>
+              <Text style={styles.amountLabel}>PAID</Text>
+              <Text style={styles.paidAmount}>₹{item.paidAmount}</Text>
+            </View>
+            <View style={styles.verticalDivider} />
+
+            <View style={styles.amountBlock}>
+              <Text style={styles.amountLabel}>UNPAID</Text>
+              <Text style={styles.unpaidAmount}>₹{item.unpaidAmount}</Text>
+            </View>
+            <View style={styles.verticalDivider} />
+
+            <View style={styles.amountBlock}>
+              <Text style={styles.amountLabel}>TOTAL</Text>
+              <Text style={styles.totalAmount}>
+                ₹{item.paidAmount + item.unpaidAmount}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
     </Pressable>
   );
 
@@ -151,6 +188,7 @@ const GenerateSpecialBills = () => {
           title="Generate Special Bills"
           source="Admin"
           onPressThreeDot={() => setMenuVisible(!menuVisible)} // Toggle menu visibility
+          backRoute="/admin/Bills" // 👈 ensures same behavior as custom back handler
         />
 
         {/* Three-dot Menu */}
@@ -164,34 +202,24 @@ const GenerateSpecialBills = () => {
         )}
 
         {/* Date Range Inputs */}
-        <View style={styles.dateInputs}>
-          <TextInput
-            label="Start Date"
-            value={startDate}
-            onChangeText={setStartDate}
-            mode="outlined"
-            placeholder="YYYY-MM-DD"
-            style={styles.dateInput}
-          />
-          <TextInput
-            label="End Date"
-            value={endDate}
-            onChangeText={setEndDate}
-            mode="outlined"
-            placeholder="YYYY-MM-DD"
-            style={styles.dateInput}
-          />
-          <Button mode="contained" onPress={() => {}} style={styles.goButton}>
-            Go
-          </Button>
-        </View>
+
+        <DateRangePicker
+          fromDate={fromDate}
+          toDate={toDate}
+          setFromDate={setFromDate}
+          setToDate={setToDate}
+          onGoPress={() => fetchBills(fromDate, toDate)} // 👈 refresh on Go
+          minimumDate={new Date(startDate)}
+          maximumDate={new Date(endDate)}
+        />
+        <Divider />
 
         {/* Bill Card */}
         <FlatList
           data={bills}
           renderItem={renderBill}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 80 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           ListEmptyComponent={
             <Text style={styles.emptyText}>No Bills to display</Text>
           }
@@ -211,7 +239,7 @@ const GenerateSpecialBills = () => {
           <FAB
             icon="plus"
             color="white" // Set the icon color to white
-            style={styles.fab}
+            style={[styles.fab, { bottom: insets.bottom + 60 }]}
             onPress={() =>
               router.push(
                 "/admin/Bills/SpecialBills/SpecialBillTypes/create-bill"
@@ -226,97 +254,14 @@ const GenerateSpecialBills = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  anchor: { position: "absolute", top: 0, right: 0 }, // Adjust position as needed
-  dateInputs: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  dateInput: {
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  goButton: {
-    backgroundColor: "green",
-    justifyContent: "center",
-    marginHorizontal: 5,
-    height: 50,
-  },
-  billCard: {
-    elevation: 2,
-    borderRadius: 8,
-    marginBottom: 20,
-    overflow: "hidden",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  billTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  amountContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  paidAmount: {
-    color: "#6200ee",
-    fontWeight: "bold",
-    marginRight: 10,
-  },
-  unpaidAmount: {
-    color: "red",
-    fontWeight: "bold",
-  },
-  billDate: {
-    marginTop: 10,
-    color: "gray",
-  },
-  billCreator: {
-    color: "gray",
-    marginTop: 5,
-  },
-  billCollectionButton: {
-    backgroundColor: "green",
-    position: "absolute",
-    bottom: 2,
-    left: 10,
-    right: 10,
-    borderRadius: 5,
-  },
+
   fab: {
     position: "absolute",
     right: 20,
-    bottom: 20,
+    bottom: 30,
     backgroundColor: "#6200ee",
   },
-  menuIcon: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-  },
-  customMenu: {
-    position: "absolute",
-    top: 50,
-    right: 10,
-    backgroundColor: "white",
-    borderRadius: 8,
-    elevation: 5,
-    padding: 10,
-    zIndex: 1,
-  },
-  menuItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: "#ccc",
-    marginVertical: 5,
-  },
+
   emptyText: {
     textAlign: "center",
     marginTop: 16,
@@ -335,6 +280,94 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 12,
     backgroundColor: "green",
+  },
+
+  billCardContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 16,
+    elevation: 2,
+  },
+
+  billCardInner: {
+    flexDirection: "column",
+  },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+
+  billTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  icon: {
+    marginRight: 6,
+    fontSize: 16,
+  },
+
+  dateText: {
+    color: "#555",
+    fontSize: 14,
+  },
+
+  personText: {
+    color: "#555",
+    fontSize: 14,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#ddd",
+    marginVertical: 12,
+  },
+
+  amountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  amountBlock: {
+    alignItems: "center",
+    flex: 1,
+  },
+
+  amountLabel: {
+    color: "#777",
+    fontSize: 12,
+  },
+
+  paidAmount: {
+    color: "green",
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+
+  unpaidAmount: {
+    color: "red",
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+
+  totalAmount: {
+    color: "black",
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+  verticalDivider: {
+    width: 1,
+    backgroundColor: "#ccc",
+    marginHorizontal: 12,
   },
 });
 

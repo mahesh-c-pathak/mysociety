@@ -11,10 +11,7 @@ import { useRouter, Stack } from "expo-router";
 import { db } from "@/firebaseConfig";
 import { useSociety } from "@/utils/SocietyContext";
 import AppbarComponent from "@/components/AppbarComponent";
-import {
-  collectionGroup,
-  getDocs,
-} from "firebase/firestore";
+import { collectionGroup, getDocs } from "firebase/firestore";
 
 // Define the structure of flatsData
 type FlatData = {
@@ -327,11 +324,7 @@ const styles = StyleSheet.create({
   floorContainer: {
     marginBottom: 8,
   },
-  floorTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
+
   row: {
     flexDirection: "row", // Flats in a row
     flexWrap: "wrap", // Allows multiple rows
@@ -349,10 +342,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flexGrow: 1,
-  },
-  flatList: {
-    justifyContent: "center",
-    alignItems: "center",
   },
 
   flatText: {

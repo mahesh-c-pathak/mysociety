@@ -1,0 +1,201 @@
+<html>
+  <head>
+    <meta charset='utf-8' />
+
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 20px 0;
+      }
+
+      .container {
+        width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 20px 40px;
+        box-sizing: border-box;
+      }
+
+      .header-wrapper {
+        width: 600px;
+        margin: 0 auto;
+        background: #2e72c4;
+        color: #fff;
+      }
+
+      .header {
+        padding: 30px 0;
+        text-align: center;
+        font-size: 26px;
+        font-weight: bold;
+        letter-spacing: 0.5px;
+      }
+
+      .header-shadow {
+        width: 100%;
+        height: 4px;
+        background: #245fa4;
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+
+      th,
+      td {
+        padding: 6px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+
+  <body>
+
+    <!-- BLUE HEADER -->
+    <div class='header-wrapper'>
+      <div class='header'>Payment Receipt</div>
+      <div class='header-shadow'></div>
+    </div>
+
+    <div class='container'>
+
+      <!-- TITLE -->
+      <h2 style='text-align:center; margin-top:10px;'>
+        {{societyName}}
+      </h2>
+
+      <hr style='margin:20px 0;' />
+
+      <!-- ADDRESS -->
+      <div style='text-align:center; font-size:14px; color:#444;'>
+        {{societyAddress}}
+      </div>
+
+      <br />
+
+      <!-- RECEIPT SECTION -->
+      <h3 style='color:#000;'>RECEIPT</h3>
+
+      <div
+        style='display:flex; justify-content:space-between; align-items:flex-start; width:100%;'
+      >
+
+        <!-- LEFT BLOCK -->
+        <div>
+          <p style='font-size:14px; line-height:1.6;'>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Owner Name:</span>
+              {{ownerName}}
+            </span>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Tenant Name:</span>
+              {{tenantName}}
+            </span>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Bill No:</span>
+              {{billNo}}
+            </span>
+
+          </p>
+        </div>
+
+        <!-- RIGHT BLOCK -->
+        <div>
+          <p style='font-size:14px; line-height:1.6;'>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Receipt No:</span>
+              {{receiptNo}}
+            </span>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Receipt Date:</span>
+              {{receiptDate}}
+            </span>
+
+            <span style='display:flex;'>
+              <span style='width:130px; font-weight:bold;'>Transaction ID:</span>
+              {{transactionId}}
+            </span>
+
+          </p>
+        </div>
+
+      </div>
+
+      <p>
+        Received ( ₹
+        <strong>{{amountInWords}}</strong>
+        ) from
+        <strong>{{ownerName}}</strong>
+        of Unit
+        <strong>{{flatNo}}</strong>
+      </p>
+
+      <!-- TABLE -->
+      <h4>ACCOUNT APPLIED</h4>
+
+      <table border='1' cellspacing='0' cellpadding='6'>
+        <thead style='background:#f0f0f0;'>
+          <tr>
+            <th style='text-align:left;'>Description of Services</th>
+            <th style='text-align:right;'>AMOUNT</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {{#each charges}}
+            <tr>
+              <td>{{this.description}}</td>
+              <td style='text-align:right;'>₹{{this.amount}}</td>
+            </tr>
+          {{/each}}
+        </tbody>
+
+        <tfoot>
+          <tr style='font-weight:bold; background:#f9f9f9;'>
+            <td>Total</td>
+            <td style='text-align:right;'>₹{{totalAmount}}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <br />
+
+      <!-- PAYMENT DETAILS -->
+      <p>
+        <strong>Payment Instrument:</strong>
+        {{paymentMethod}}<br />
+        Note : Subject to realisation (in case of payment by cheque)
+      </p>
+
+      <p style='color:green; font-weight:bold; text-align:center;'>
+        Transaction is Successful
+      </p>
+
+      <p style='font-size:12px; color:#666; text-align:center;'>
+        Electronically Generated, does not require Signature.
+      </p>
+
+      <br /><br />
+
+      <!-- FOOTER -->
+      <hr />
+
+      <p style='text-align:center; font-weight:bold;'>
+        Powered by myhousingapp
+      </p>
+
+      <p style='text-align:center; font-size:12px; color:#777;'>
+        This is a system generated email. Please do not reply.
+      </p>
+
+    </div>
+  </body>
+</html>

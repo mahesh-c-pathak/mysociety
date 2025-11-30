@@ -1,4 +1,4 @@
-import { Slot } from "expo-router";
+import { Stack } from "expo-router";
 import { useMemo } from "react";
 import { PaperProvider, ActivityIndicator } from "react-native-paper";
 import { adminTheme, gatekeeperTheme, userTheme } from "@/themes";
@@ -6,6 +6,7 @@ import { AuthRoleProvider, useAuthRole } from "@/lib/authRole";
 import { SocietyProvider } from "@/utils/SocietyContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import VisitorApprovalModal from "@/components/VisitorApprovalModal";
+import { GestureHandlerRootView } from "react-native-gesture-handler"; // 👈 import this
 
 function ThemedGate({ children }: { children: React.ReactNode }) {
   const { role, loading } = useAuthRole();
@@ -22,17 +23,17 @@ function ThemedGate({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
-    <AuthRoleProvider>
-      <SocietyProvider>
-        <NotificationProvider>
-          <ThemedGate>
-            <Slot />
-            <VisitorApprovalModal />
-        
-          </ThemedGate>
-        </NotificationProvider>
-      </SocietyProvider>
-    </AuthRoleProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthRoleProvider>
+        <SocietyProvider>
+          <NotificationProvider>
+            <ThemedGate>
+              <Stack screenOptions={{ headerShown: false }} />
+              <VisitorApprovalModal />
+            </ThemedGate>
+          </NotificationProvider>
+        </SocietyProvider>
+      </AuthRoleProvider>
+    </GestureHandlerRootView>
   );
 }
-

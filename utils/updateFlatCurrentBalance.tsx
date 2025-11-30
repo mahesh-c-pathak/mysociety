@@ -1,104 +1,88 @@
-import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    query,
-    orderBy,
-    setDoc,
-    updateDoc,
-  } from "firebase/firestore";
-  import { Alert } from "react-native";
-  
-  interface BalanceData {
-    dailyChange: number;
-    cumulativeBalance: number;
-  }
-  
-  export const updateFlatCurrentBalance = async (
-    currentbalanceCollectionRef: any, // Firestore collection reference
-    amount: number,
-    option: "Add" | "Subtract",
-    date: string
-  ): Promise<string> => {
-    try {
-      const balanceDocRef = doc(currentbalanceCollectionRef, date);
-      const balanceDocSnapshot = await getDoc(balanceDocRef);
-  
-      let previousDailyChange = 0;
-      let previousCumulativeBalance = 0;
-  
-      if (balanceDocSnapshot.exists()) {
-        const balanceData = balanceDocSnapshot.data() as BalanceData;
-        previousDailyChange = balanceData.dailyChange || 0;
-        previousCumulativeBalance = balanceData.cumulativeBalance || 0;
-      }
-  
-      // Retrieve all balances ordered by date
-      const balancesQuery = query(currentbalanceCollectionRef, orderBy("date"));
-      const balancesSnapshot = await getDocs(balancesQuery);
-  
-      // Find the most recent prior cumulative balance
-      let priorCumulativeBalance = 0;
-  
-      balancesSnapshot.forEach((docSnapshot) => {
-        const balanceDate = docSnapshot.id;
-        if (balanceDate < date) {
-          const balanceData = docSnapshot.data() as BalanceData;
-          priorCumulativeBalance = balanceData.cumulativeBalance || 0;
-        }
-      });
-  
-      // Calculate the new daily change
-      const newDailyChange =
-        option === "Add"
-          ? previousDailyChange + amount
-          : previousDailyChange - amount;
-  
-      // Calculate the new cumulative balance based on the prior date
-      const newCumulativeBalance = priorCumulativeBalance + newDailyChange;
-  
-      // Update or create the balance document for the given date
-      await setDoc(
-        balanceDocRef,
+import { db } from "@/firebaseConfig";
+import { doc, runTransaction, increment } from "firebase/firestore";
+import { Alert } from "react-native";
+
+export const updateFlatCurrentBalance = async (
+  currentbalanceCollectionRef: any,
+  amount: number,
+  option: "Add" | "Subtract",
+  date: string,
+  societyName: string
+): Promise<string> => {
+  try {
+    const segments = currentbalanceCollectionRef.path.split("/");
+
+    const customWings = `${societyName} wings`;
+    const customFloors = `${societyName} floors`;
+    const customFlats = `${societyName} flats`;
+
+    const wing = segments[3];
+    const floor = segments[5];
+    const flatNumber = segments[7];
+
+    const flatDocRef = doc(
+      db,
+      "Societies",
+      societyName,
+      customWings,
+      wing,
+      customFloors,
+      floor,
+      customFlats,
+      flatNumber
+    );
+
+    const todayDocRef = doc(currentbalanceCollectionRef, date);
+
+    await runTransaction(db, async (transaction) => {
+      /* -----------------------------------
+         1️⃣ READ ALL DOCS FIRST (required)
+      ------------------------------------*/
+      const [todaySnap, flatSnap] = await Promise.all([
+        transaction.get(todayDocRef),
+        transaction.get(flatDocRef),
+      ]);
+
+      const previousDaily = todaySnap.exists()
+        ? todaySnap.data().dailyChange || 0
+        : 0;
+
+      const newDaily =
+        option === "Add" ? previousDaily + amount : previousDaily - amount;
+
+      const delta = option === "Add" ? amount : -amount;
+
+      const lastUpdated = flatSnap.exists()
+        ? flatSnap.data().lastUpdatedAt
+        : null;
+
+      /* -----------------------------------
+         2️⃣ NOW WRITE (all reads are done)
+      ------------------------------------*/
+
+      // update today doc
+      transaction.set(
+        todayDocRef,
+        { dailyChange: newDaily, date },
+        { merge: true }
+      );
+
+      // update flat master record
+      transaction.set(
+        flatDocRef,
         {
-          date,
-          dailyChange: newDailyChange,
-          cumulativeBalance: newCumulativeBalance,
+          totalBalance: increment(delta),
+          lastUpdatedAt:
+            !lastUpdated || date > lastUpdated ? date : lastUpdated,
         },
         { merge: true }
       );
-  
-      // Recalculate cumulative balances for subsequent dates
-      let carryForwardBalance = newCumulativeBalance;
-  
-      const updatePromises: Promise<void>[] = [];
-  
-      balancesSnapshot.forEach((docSnapshot) => {
-        const balanceDate = docSnapshot.id;
-        if (balanceDate > date) {
-          const balanceData = docSnapshot.data() as BalanceData;
-          const updatedCumulativeBalance =
-            carryForwardBalance + (balanceData.dailyChange || 0);
-  
-          carryForwardBalance = updatedCumulativeBalance;
-  
-          updatePromises.push(
-            updateDoc(doc(currentbalanceCollectionRef, balanceDate), {
-              cumulativeBalance: updatedCumulativeBalance,
-            })
-          );
-        }
-      });
-  
-      // Wait for all updates to complete
-      await Promise.all(updatePromises);
-  
-      return "Success";
-    } catch (error) {
-      console.error("Error updating balance:", error);
-      Alert.alert("Error", "Failed to update balance.");
-      throw error;
-    }
-  };
-  
+    });
+
+    return "Success";
+  } catch (error) {
+    console.error("Error updating balance:", error);
+    Alert.alert("Error", "Failed to update balance.");
+    throw error;
+  }
+};

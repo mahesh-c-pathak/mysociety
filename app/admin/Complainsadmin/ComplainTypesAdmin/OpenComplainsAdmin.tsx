@@ -11,12 +11,15 @@ import { useRouter } from "expo-router";
 import { db } from "@/firebaseConfig";
 import { collectionGroup, getDocs, query, where } from "firebase/firestore";
 import { useSociety } from "@/utils/SocietyContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const OpenComplainsAdmin = () => {
   const router = useRouter();
   const { societyName } = useSociety();
+  const insets = useSafeAreaInsets();
 
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+  const customComplainSubcollectionName = "complains";
 
   const [complainData, setComplainData] = useState<any[]>([]);
 
@@ -25,6 +28,7 @@ const OpenComplainsAdmin = () => {
       // Query: Fetch all complaints where status = "Open"
       const openComplaintsQuery = query(
         collectionGroup(db, customComplainSubcollectionName),
+        where("societyName", "==", societyName),
         where("status", "==", "Open") // Fetch only Open complaints
       );
 
@@ -56,49 +60,75 @@ const OpenComplainsAdmin = () => {
     fetchComplainData();
   }, []);
 
-  const renderComplain = ({ item }: { item: any }) => (
-    <View style={styles.cardview}>
-      <TouchableOpacity>
-        <Text style={{ fontWeight: "bold" }}>{item.complainName}</Text>
-        <View style={styles.row}>
-          <Text>Complained By: {item.createdBy}</Text>
-          <Text>{item.createdDate}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text>Priority : {item.priority}</Text>
-          <Text>{item.classification}</Text>
-        </View>
-        <View style={[styles.row, { alignItems: "flex-start" }]}>
-          <Text>Type : {item.complainCategory}</Text>
-          <View style={{ backgroundColor: "#2196F3", padding: 6 }}>
-            <Text style={{ color: "#fff" }}>{item.status}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-      <Divider style={{ backgroundColor: "#ccc", marginVertical: 8 }} />
-      <View style={styles.row}>
+  const renderComplain = ({ item }: { item: any }) => {
+    // flatten assigned staff, gatekeepers, and members
+    const assignedNames = [
+      ...(item.assigned?.staff?.map((s: any) => s.label) || []),
+      ...(item.assigned?.gatekeepers?.map((g: any) => g.label) || []),
+      ...(item.assigned?.members?.map((m: any) =>
+        m.floor ? `${m.floor} - ${m.label}` : m.label
+      ) || []),
+    ].join(", ");
+
+    return (
+      <View style={styles.cardview}>
         <TouchableOpacity>
-          <View style={styles.innerButton}>
-            <Text>Assign</Text>
+          <Text style={{ fontWeight: "bold" }}>{item.complainName}</Text>
+          <View style={styles.row}>
+            <Text>Complained By: {item.createdBy}</Text>
+            <Text>{item.createdDate}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text>Priority : {item.priority}</Text>
+            <Text>{item.classification}</Text>
+          </View>
+          <View style={[styles.row, { alignItems: "flex-start" }]}>
+            <Text>Type : {item.complainCategory}</Text>
+            <View style={{ backgroundColor: "#2196F3", padding: 6 }}>
+              <Text style={{ color: "#fff" }}>{item.status}</Text>
+            </View>
+          </View>
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ fontWeight: "bold" }}>
+              Assigned:{" "}
+              <Text style={{ fontWeight: "normal" }}>{assignedNames}</Text>
+            </Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() =>
-            router.push({
-              pathname: "/admin/Complainsadmin/complainDetailsAdmin",
-              params: {
-                item: JSON.stringify(item),
-              }, // Pass item as a string
-            })
-          }
-        >
-          <View style={styles.innerButton}>
-            <Text>Message</Text>
-          </View>
-        </TouchableOpacity>
+        <Divider style={{ backgroundColor: "#ccc", marginVertical: 8 }} />
+        <View style={styles.row}>
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/admin/Complainsadmin/AssignComplain",
+                params: {
+                  item: JSON.stringify(item),
+                }, // Pass item as a string
+              })
+            }
+          >
+            <View style={styles.innerButton}>
+              <Text>Assign</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: "/admin/Complainsadmin/complainDetailsAdmin",
+                params: {
+                  item: JSON.stringify(item),
+                }, // Pass item as a string
+              })
+            }
+          >
+            <View style={styles.innerButton}>
+              <Text>Message</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -113,7 +143,7 @@ const OpenComplainsAdmin = () => {
       />
       {/* Floating Action Button */}
       <FAB
-        style={styles.fab}
+        style={[styles.fab, { bottom: insets.bottom }]}
         icon="plus"
         color="white" // Set the icon color to white
         onPress={() => {

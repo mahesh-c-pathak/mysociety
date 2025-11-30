@@ -19,9 +19,11 @@ import {
   DocumentData,
 } from "firebase/firestore";
 import { useAuthRole } from "@/lib/authRole";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const AddComplainAdmin = () => {
   const { userName } = useAuthRole();
+  const insets = useSafeAreaInsets();
   const { societyName } = useSociety();
   const { complainRef: complainRefParam } = useLocalSearchParams();
 
@@ -32,7 +34,9 @@ const AddComplainAdmin = () => {
   const complainRef = complainRefParam as string;
   const isEditMode = !!complainRef;
 
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+
+  const customComplainSubcollectionName = "complains";
 
   const [complainName, setComplainName] = useState<string>("");
   const [complainCategory, setComplainCategory] = useState<string>("");
@@ -148,6 +152,7 @@ const AddComplainAdmin = () => {
 
       // Update the existing document
       await updateDoc(complainDocRef, {
+        societyName,
         complainName,
         complainCategory,
         classification,
@@ -162,7 +167,10 @@ const AddComplainAdmin = () => {
       Alert.alert("Success", "Complaint Updated Successfully.", [
         {
           text: "OK",
-          onPress: () => router.replace("/admin/Complainsadmin?source=Admin"),
+          onPress: () =>
+            router.replace(
+              "/admin/Complainsadmin/ComplainTypesAdmin/OpenComplainsAdmin"
+            ),
         },
       ]);
     } catch (error) {
@@ -198,6 +206,7 @@ const AddComplainAdmin = () => {
 
       // Create a new complaint document
       await addDoc(complainCollectionRef, {
+        societyName,
         complainName,
         description,
         complainCategory,
@@ -212,7 +221,10 @@ const AddComplainAdmin = () => {
       Alert.alert("Success", "Complaint Added Successfully.", [
         {
           text: "OK",
-          onPress: () => router.replace("/admin/Complainsadmin?source=Admin"),
+          onPress: () =>
+            router.replace(
+              "/admin/Complainsadmin/ComplainTypesAdmin/OpenComplainsAdmin"
+            ),
         },
       ]);
     } catch (error) {
@@ -311,10 +323,12 @@ const AddComplainAdmin = () => {
       </ScrollView>
 
       {/* Save Button */}
-      <CustomButton
-        onPress={isEditMode ? handleUpdate : handleSave}
-        title={isEditMode ? "Update" : "Save"}
-      />
+      <View style={[styles.footer, { bottom: insets.bottom }]}>
+        <CustomButton
+          onPress={isEditMode ? handleUpdate : handleSave}
+          title={isEditMode ? "Update" : "Save"}
+        />
+      </View>
     </View>
   );
 };
@@ -336,5 +350,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center", // Ensures vertical alignment
+  },
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0, // 👈 ensures it's always visible at bottom
+    backgroundColor: "#fff",
+    padding: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ddd",
   },
 });

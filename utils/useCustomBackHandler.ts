@@ -3,13 +3,22 @@ import { useEffect } from "react";
 import { BackHandler } from "react-native";
 import { useRouter, type Href } from "expo-router";
 
-export function useCustomBackHandler(targetRoute: Href) {
+/**
+ * Custom back handler hook.
+ * - If `targetRoute` is provided → navigates to that route using router.replace().
+ * - If no `targetRoute` is provided → performs router.back().
+ */
+export function useCustomBackHandler(targetRoute?: Href) {
   const router = useRouter();
 
   useEffect(() => {
     const backAction = () => {
-      router.replace(targetRoute);
-      return true; // prevent default
+      if (targetRoute) {
+        router.replace(targetRoute);
+      } else {
+        router.back();
+      }
+      return true; // prevent default back behavior
     };
 
     const backHandler = BackHandler.addEventListener(

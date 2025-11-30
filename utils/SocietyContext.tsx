@@ -6,8 +6,7 @@ import React, {
   useEffect,
 } from "react";
 
-import { collection, getDocs } from "firebase/firestore";
-
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 
 import { db } from "@/firebaseConfig";
 import { useAuthRole } from "@/lib/authRole";
@@ -28,6 +27,8 @@ interface SocietyContextProps {
   incomeAccounts: string[];
   expenditureAccounts: string[];
   fetchFinancialData: () => Promise<void>;
+  isAdditionalBankCash: boolean;
+  setIsAdditionalBankCash: (val: boolean) => void;
 }
 
 const SocietyContext = createContext<SocietyContextProps | undefined>(
@@ -84,6 +85,29 @@ export const SocietyProvider = ({ children }: { children: ReactNode }) => {
     "Indirect Expenses",
     "Maintenance & Repairing",
   ];
+
+  const [isAdditionalBankCash, setIsAdditionalBankCash] =
+    useState<boolean>(false);
+
+  // optional: read persisted flag from the society top-level doc once societyName is set
+  useEffect(() => {
+    const fetchFlag = async () => {
+      try {
+        if (!societyName) return;
+        const docRef = doc(db, "Societies", societyName);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (typeof data.isAdditionalBankCash === "boolean") {
+            setIsAdditionalBankCash(data.isAdditionalBankCash);
+          }
+        }
+      } catch (e) {
+        console.warn("Could not read isAdditionalBankCash from Firestore:", e);
+      }
+    };
+    fetchFlag();
+  }, [societyName]);
 
   const fetchFinancialData = async () => {
     try {
@@ -151,6 +175,8 @@ export const SocietyProvider = ({ children }: { children: ReactNode }) => {
         incomeAccounts,
         expenditureAccounts,
         fetchFinancialData,
+        isAdditionalBankCash,
+        setIsAdditionalBankCash,
       }}
     >
       {children}

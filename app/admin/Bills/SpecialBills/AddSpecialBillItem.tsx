@@ -1,15 +1,30 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Text, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Text,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { TextInput, Button, Menu, Provider } from "react-native-paper";
-import { collection, doc, getDoc, getDocs, query, where, addDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  addDoc,
+} from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AppbarComponent from '../../../../components/AppbarComponent';
+import AppbarComponent from "@/components/AppbarComponent";
 
-import { billItemLedgerGroupList } from '../../../../components/LedgerGroupList'; // Import the array
-import { fetchAccountList } from "../../../../utils/acountFetcher";
-import Dropdown from "../../../../utils/DropDown";
+import { billItemLedgerGroupList } from "@/components/LedgerGroupList"; // Import the array
+import { fetchAccountList } from "@/utils/acountFetcher";
+import Dropdown from "@/utils/DropDown";
 
 import { useSociety } from "@/utils/SocietyContext";
 
@@ -22,17 +37,19 @@ const AddSpecialBillItem = () => {
   const [rentAmount, setRentAmount] = useState("");
   const [closedUnitAmount, setClosedUnitAmount] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
- 
+
   const router = useRouter();
   const params = useLocalSearchParams();
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+  const [accountFromOptions, setAccountFromOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
 
   const [ledgerAccount, setLedgerAccount] = useState<string>("");
   const [groupFrom, setGroupFrom] = useState<string>("");
 
-  const specialBillitemCollectionName = `specialBillitems_${societyName}`; 
+  const specialBillitemCollectionName = `specialBillitems_${societyName}`;
 
   // Prefill form in update mode
   useEffect(() => {
@@ -40,7 +57,13 @@ const AddSpecialBillItem = () => {
       if (params?.id) {
         setIsEditMode(true);
         try {
-          const billItemsRef = doc(db, "Societies", societyName, specialBillitemCollectionName, params.id as string);
+          const billItemsRef = doc(
+            db,
+            "Societies",
+            societyName,
+            specialBillitemCollectionName,
+            params.id as string
+          );
           const billItemsRefDoc = await getDoc(billItemsRef);
 
           if (billItemsRefDoc.exists()) {
@@ -48,9 +71,21 @@ const AddSpecialBillItem = () => {
             setItemName(billItemsData.itemName || "");
             setNotes(billItemsData.notes || "");
             setType(billItemsData.type || "Select");
-            setOwnerAmount(billItemsData.ownerAmount ? billItemsData.ownerAmount.toString() : "");
-            setRentAmount(billItemsData.rentAmount ? billItemsData.rentAmount.toString() : "");
-            setClosedUnitAmount(billItemsData.closedUnitAmount ? billItemsData.closedUnitAmount.toString() : "");
+            setOwnerAmount(
+              billItemsData.ownerAmount
+                ? billItemsData.ownerAmount.toString()
+                : ""
+            );
+            setRentAmount(
+              billItemsData.rentAmount
+                ? billItemsData.rentAmount.toString()
+                : ""
+            );
+            setClosedUnitAmount(
+              billItemsData.closedUnitAmount
+                ? billItemsData.closedUnitAmount.toString()
+                : ""
+            );
           } else {
             Alert.alert("Error", "Transaction not found.");
           }
@@ -61,37 +96,38 @@ const AddSpecialBillItem = () => {
       }
     };
     const fetchAccountOptions = async () => {
-        try {
-            const ledgerGroupsRef = collection(db, "ledgerGroups");
-    
-            const fromQuerySnapshot = await getDocs(
-              query(ledgerGroupsRef, 
-                where("name", "in", [
-                    "Indirect Income", 
-                    "Current Liabilities",
-                    "Reserve and Surplus",
-                    "Deposit",
-                    "Direct Income",
-                    "Capital Account",
-                    "Account Payable",
-                    "Provision",
-                    "Share Capital",
-                    "Sundry Creditors",
-                    "Suspense Account",
-                ]))
-            ); 
-            const fromAccounts = fromQuerySnapshot.docs
-              .map((doc) => doc.data().accounts || [])
-              .flat()
-              .filter((account) => account.trim() !== "")
-              .sort((a, b) => a.localeCompare(b)); // Sort alphabetically
-            setAccountFromOptions(fromAccounts);
-        } catch (error) {
-            console.error("Error fetching account options:", error);
-            Alert.alert("Error", "Failed to fetch account options.");
-          }
-    };
+      try {
+        const ledgerGroupsRef = collection(db, "ledgerGroups");
 
+        const fromQuerySnapshot = await getDocs(
+          query(
+            ledgerGroupsRef,
+            where("name", "in", [
+              "Indirect Income",
+              "Current Liabilities",
+              "Reserve and Surplus",
+              "Deposit",
+              "Direct Income",
+              "Capital Account",
+              "Account Payable",
+              "Provision",
+              "Share Capital",
+              "Sundry Creditors",
+              "Suspense Account",
+            ])
+          )
+        );
+        const fromAccounts = fromQuerySnapshot.docs
+          .map((doc) => doc.data().accounts || [])
+          .flat()
+          .filter((account) => account.trim() !== "")
+          .sort((a, b) => a.localeCompare(b)); // Sort alphabetically
+        setAccountFromOptions(fromAccounts);
+      } catch (error) {
+        console.error("Error fetching account options:", error);
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
 
     fetchBillItemsDetails();
     fetchAccountOptions();
@@ -101,15 +137,17 @@ const AddSpecialBillItem = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const { accountOptions } = await fetchAccountList(societyName,billItemLedgerGroupList);
+        const { accountOptions } = await fetchAccountList(
+          societyName,
+          billItemLedgerGroupList
+        );
         setAccountFromOptions(accountOptions);
       } catch (error: any) {
-  Alert.alert(
-    "Error",
-    error?.message ?? "Failed to fetch account options."
-  );
-}
-
+        Alert.alert(
+          "Error",
+          error?.message ?? "Failed to fetch account options."
+        );
+      }
     };
     fetchOptions();
   }, [params.id, societyName]);
@@ -135,44 +173,61 @@ const AddSpecialBillItem = () => {
     try {
       if (isEditMode) {
         if (!ledgerAccount) {
-            Alert.alert("Update Bill Item ", "Please Select Ledger Account.");
-            return;
+          Alert.alert("Update Bill Item ", "Please Select Ledger Account.");
+          return;
         }
-        
 
         // Fetch existing items from AsyncStorage
-            const existingItemsString = await AsyncStorage.getItem("@createdBillItem");
-            const existingItems = existingItemsString ? JSON.parse(existingItemsString) : [];
+        const existingItemsString =
+          await AsyncStorage.getItem("@createdBillItem");
+        const existingItems = existingItemsString
+          ? JSON.parse(existingItemsString)
+          : [];
 
         // Ensure the existing data is an array
-            if (!Array.isArray(existingItems)) {
-            throw new Error("Corrupted data in AsyncStorage.");
-            }
+        if (!Array.isArray(existingItems)) {
+          throw new Error("Corrupted data in AsyncStorage.");
+        }
 
-            // Append the new item
-            const updatedBillItem = { ...newBillItem, id: `${Date.now()}-${Math.random()}` };
-            const updatedItems = [...existingItems, updatedBillItem];
+        // Append the new item
+        const updatedBillItem = {
+          ...newBillItem,
+          id: `${Date.now()}-${Math.random()}`,
+        };
+        const updatedItems = [...existingItems, updatedBillItem];
 
-            // Save back to AsyncStorage
-            await AsyncStorage.setItem("@createdBillItem", JSON.stringify(updatedItems));
-        
-
+        // Save back to AsyncStorage
+        await AsyncStorage.setItem(
+          "@createdBillItem",
+          JSON.stringify(updatedItems)
+        );
 
         Alert.alert("Success", "Bill item updated successfully!", [
-          { text: "OK", onPress: () => router.push({
-            pathname: "./CreateSpecialBill", // Adjust this path based on your routing structure
-            params: {
-                id: params.id, // Pass the document ID
-                ...newBillItem, // Pass the full item data
-              },
-          }) },
+          {
+            text: "OK",
+            onPress: () =>
+              router.push({
+                pathname: "./CreateSpecialBill", // Adjust this path based on your routing structure
+                params: {
+                  id: params.id, // Pass the document ID
+                  ...newBillItem, // Pass the full item data
+                },
+              }),
+          },
         ]);
-         
       } else {
-        await addDoc(collection(db, "Societies", societyName, specialBillitemCollectionName ), {  
-          ...newBillItem,
-          createdAt: new Date().toISOString(),
-        });
+        await addDoc(
+          collection(
+            db,
+            "Societies",
+            societyName,
+            specialBillitemCollectionName
+          ),
+          {
+            ...newBillItem,
+            createdAt: new Date().toISOString(),
+          }
+        );
         Alert.alert("Success", "Bill item added successfully!", [
           { text: "OK", onPress: () => router.replace("./specialBillitems") },
         ]);
@@ -183,15 +238,14 @@ const AddSpecialBillItem = () => {
     }
   };
 
-
   return (
     <Provider>
       <View style={styles.container}>
         {/* Top Appbar */}
-    <AppbarComponent
-        title= {isEditMode ? "Update Bill Item" : "Add Bill Item"} 
-        source="Admin"
-      />
+        <AppbarComponent
+          title={isEditMode ? "Update Bill Item" : "Add Bill Item"}
+          source="Admin"
+        />
         <KeyboardAvoidingView
           style={styles.form}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -212,32 +266,30 @@ const AddSpecialBillItem = () => {
             multiline
           />
           {isEditMode && (
-              <View style={styles.section}>
-                <Text style={styles.label}>Paid From</Text>
-                <Dropdown
-                  data={accountFromOptions.map((option) => ({
-                    label: option.label,
-                    value: option.value,
-                  }))}
-                  onChange={(selectedValue) => {
-                    setLedgerAccount(selectedValue);
+            <View style={styles.section}>
+              <Text style={styles.label}>Paid From</Text>
+              <Dropdown
+                data={accountFromOptions.map((option) => ({
+                  label: option.label,
+                  value: option.value,
+                }))}
+                onChange={(selectedValue) => {
+                  setLedgerAccount(selectedValue);
 
-                    // Find the selected account to get its group
-                    const selectedOption = accountFromOptions.find(
-                      (option) => option.value === selectedValue
-                    );
-                    if (selectedOption) {
-                      setGroupFrom(selectedOption.group); // Set the group name
-                      console.log("Selected Group:", selectedOption.group);
-                    }
-                    
-                  }}
-                  placeholder="Select Account"
-                  initialValue={ledgerAccount}
-                />
-
-              </View>           
-            )}
+                  // Find the selected account to get its group
+                  const selectedOption = accountFromOptions.find(
+                    (option) => option.value === selectedValue
+                  );
+                  if (selectedOption) {
+                    setGroupFrom(selectedOption.group); // Set the group name
+                    console.log("Selected Group:", selectedOption.group);
+                  }
+                }}
+                placeholder="Select Account"
+                initialValue={ledgerAccount}
+              />
+            </View>
+          )}
           <Menu
             visible={menuVisible}
             onDismiss={closeMenu}
@@ -248,13 +300,33 @@ const AddSpecialBillItem = () => {
                 style={styles.input}
                 mode="outlined"
                 editable={false}
-                right={<TextInput.Icon icon="chevron-down" onPress={openMenu} />}
+                right={
+                  <TextInput.Icon icon="chevron-down" onPress={openMenu} />
+                }
               />
             }
           >
-            <Menu.Item onPress={() => { setType("Fixed Price"); closeMenu(); }} title="Fixed Price" />
-            <Menu.Item onPress={() => { setType("Based on Unit"); closeMenu(); }} title="Based on Unit" />
-            <Menu.Item onPress={() => { setType("Based on Sq Feet"); closeMenu(); }} title="Based on Sq Feet" />
+            <Menu.Item
+              onPress={() => {
+                setType("Fixed Price");
+                closeMenu();
+              }}
+              title="Fixed Price"
+            />
+            <Menu.Item
+              onPress={() => {
+                setType("Based on Unit");
+                closeMenu();
+              }}
+              title="Based on Unit"
+            />
+            <Menu.Item
+              onPress={() => {
+                setType("Based on Sq Feet");
+                closeMenu();
+              }}
+              title="Based on Sq Feet"
+            />
           </Menu>
 
           {type !== "Select" && (
@@ -296,7 +368,7 @@ const AddSpecialBillItem = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF",},
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
   form: {
     flex: 1,
     padding: 20,

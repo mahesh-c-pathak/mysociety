@@ -5,14 +5,10 @@ import {
   FlatList,
   TouchableWithoutFeedback,
 } from "react-native";
-import {  Card, Text, Divider } from "react-native-paper";
-import {  useLocalSearchParams } from "expo-router";
+import { Card, Text, Divider } from "react-native-paper";
+import { useLocalSearchParams } from "expo-router";
 import { useSociety } from "@/utils/SocietyContext";
-import {
-  collection,
-  getDocs,
-  doc,
-} from "firebase/firestore";
+import { collection, getDocs, doc, query, where } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
 import AppbarComponent from "@/components/AppbarComponent";
@@ -38,8 +34,11 @@ const MyStatement = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const [myStatementData, setMyStatementData] = useState<any>([]);
 
@@ -57,17 +56,28 @@ const MyStatement = () => {
         flatDocRef,
         customFlatsBillsSubcollectionName
       );
+
+      {
+        /** 
       const unclearedBalanceRef = collection(
         flatDocRef,
         unclearedBalanceSubcollectionName
       );
+      */
+      }
+
+      const unclearedBalanceQuery = query(
+        collection(flatDocRef, unclearedBalanceSubcollectionName),
+        where("societyName", "==", societyName)
+      );
 
       let refundtotalDebit = 0;
       let addtotalCredit = 0;
+      let totalUnclearedBalance = 0;
 
       // Fetch both collections in parallel
       const [unclearedSnapshot, billsSnapshot] = await Promise.all([
-        getDocs(unclearedBalanceRef),
+        getDocs(unclearedBalanceQuery),
         getDocs(billsCollectionRef),
       ]);
 
@@ -83,7 +93,7 @@ const MyStatement = () => {
           type,
           voucherNumber,
           paymentReceivedDate,
-          amount,
+          amountReceived,
           amountPaid,
         } = docData;
 
@@ -92,15 +102,15 @@ const MyStatement = () => {
             id: `${voucherNumber}- ${type}` || `${Math.random()}`, // Ensure ID is unique,
             title: type === "Refund" ? "Refund Money" : "Add Money",
             dueDate: paymentReceivedDate,
-            amount,
+            amount: amountReceived,
             type,
           });
 
           if (type === "Refund") {
-            refundtotalDebit += amount;
+            refundtotalDebit += amountReceived;
           }
           if (type === "Advance") {
-            addtotalCredit += amount;
+            addtotalCredit += amountReceived;
           }
         } else if (status === "Uncleared") {
           totalUnclearedBalance += amountPaid || 0;
@@ -119,11 +129,12 @@ const MyStatement = () => {
         } = docData;
 
         billsData.push({
-          id: voucherNumber || `${voucherNumber}-${Math.random()}`, // Ensure ID is unique,,
+          id: doc.id, // voucherNumber || `${voucherNumber}-${Math.random()}`, // Ensure ID is unique,,
           title: `Paid bill for ${name}`,
           dueDate: paymentDate,
           amount,
           status,
+          voucherNumber,
           type: "Paid bill",
         });
 
@@ -144,8 +155,6 @@ const MyStatement = () => {
       console.error("Error fetching bills and balance data:", error);
     }
   };
-
-  
 
   // Render each item in the statement
   const renderStatementItem = ({ item }: { item: any }) => (
@@ -243,12 +252,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-  },
-  header: { backgroundColor: "#2196F3" },
-  titleStyle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
   },
   summaryContainer: {
     flexDirection: "row",

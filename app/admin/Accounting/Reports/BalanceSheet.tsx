@@ -9,7 +9,7 @@ import {
   Alert,
   TouchableWithoutFeedback,
 } from "react-native";
-import {  ActivityIndicator, Divider } from "react-native-paper";
+import { ActivityIndicator, Divider } from "react-native-paper";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useSociety } from "@/utils/SocietyContext";
@@ -20,7 +20,7 @@ import {
 } from "@/utils/financialYearHelpers";
 
 import { formatDateIntl, formatDate } from "../../../../utils/dateFormatter";
-import { fetchLatestBalanceBeforeDate } from "../../../../utils/fetchbalancefromdatabase";
+import { fetchBalanceForDate } from "../../../../utils/fetchbalancefromdatabase";
 
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -42,7 +42,7 @@ const BalanceSheetNew: React.FC = () => {
   const { societyName } = useSociety();
   const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`;
   const accountsCollectionName = `accounts_${societyName}`;
-  
+
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
   const { width } = useWindowDimensions();
   const [fromDate, setFromDate] = useState(new Date(Date.now()));
@@ -67,7 +67,6 @@ const BalanceSheetNew: React.FC = () => {
       assets: 0,
     }
   );
-  
 
   const handleYearSelect = (start: string, end: string) => {
     const startDate = new Date(start);
@@ -123,8 +122,6 @@ const BalanceSheetNew: React.FC = () => {
     "Sundry Debtors",
   ];
 
-  
-
   const IncomeCategories = ["Direct Income", "Indirect Income"];
 
   const ExpenditureCategories = [
@@ -157,7 +154,7 @@ const BalanceSheetNew: React.FC = () => {
             async (accountDoc) => {
               const accountName = accountDoc.id;
 
-              const latestBalance = await fetchLatestBalanceBeforeDate(
+              const latestBalance = await fetchBalanceForDate(
                 societyName,
                 ledgerGroupName,
                 accountName,
@@ -220,6 +217,9 @@ const BalanceSheetNew: React.FC = () => {
       });
 
       const incomeExpenditureSurplus = incomeTotal - expenditureTotal;
+
+      // Using + instead of - to reflect total combined effect of income and expense reductions
+      // const incomeExpenditureSurplus = incomeTotal + expenditureTotal;
 
       liabilities.push({
         group: "Income & Expenditure Account",
@@ -284,7 +284,7 @@ const BalanceSheetNew: React.FC = () => {
     const formattedStartDate = formatDate(start);
     const formattedEndDate = formatDate(end);
 
-    const balanceBank = await fetchLatestBalanceBeforeDate(
+    const balanceBank = await fetchBalanceForDate(
       societyName,
       "Bank Accounts",
       "Bank",
@@ -292,7 +292,7 @@ const BalanceSheetNew: React.FC = () => {
     );
     setOpeningBankBalance(balanceBank);
 
-    const balanceCash = await fetchLatestBalanceBeforeDate(
+    const balanceCash = await fetchBalanceForDate(
       societyName,
       "Cash in Hand",
       "Cash",
@@ -300,7 +300,7 @@ const BalanceSheetNew: React.FC = () => {
     );
     setOpeningCashBalance(balanceCash);
 
-    const balanceBankForDate = await fetchLatestBalanceBeforeDate(
+    const balanceBankForDate = await fetchBalanceForDate(
       societyName,
       "Bank Accounts",
       "Bank",
@@ -308,7 +308,7 @@ const BalanceSheetNew: React.FC = () => {
     );
     setClosingBankBalance(balanceBankForDate);
 
-    const balanceCloseForDate = await fetchLatestBalanceBeforeDate(
+    const balanceCloseForDate = await fetchBalanceForDate(
       societyName,
       "Cash in Hand",
       "Cash",
@@ -381,8 +381,8 @@ const BalanceSheetNew: React.FC = () => {
         <body>
           <h1>Balance Sheet</h1>
           <p>Period: ${formatDateIntl(fromDate)} to ${formatDateIntl(
-        toDate
-      )}</p>
+            toDate
+          )}</p>
 
           <h2>Liabilities</h2>
           <table>
@@ -501,152 +501,152 @@ const BalanceSheetNew: React.FC = () => {
   };
 
   return (
-    
-      <View style={styles.container}>
-        <TouchableWithoutFeedback onPress={closeMenu}>
-      <View style={{ flexGrow: 0 }}>
-        
-        {/* Top Appbar */}
-        <AppbarComponent
-          title="BalanceSheet"
-          source="Admin"
-          onPressThreeDot={() => setMenuVisible(!menuVisible)}
-        />
-
-        {/* Three-dot Menu */}
-        {/* Custom Menu */}
-        {menuVisible && (
-          <AppbarMenuComponent
-            items={["Download PDF"]}
-            onItemPress={handleMenuOptionPress}
-            closeMenu={closeMenu}
+    <View style={styles.container}>
+      <TouchableWithoutFeedback onPress={closeMenu}>
+        <View style={{ flexGrow: 0 }}>
+          {/* Top Appbar */}
+          <AppbarComponent
+            title="BalanceSheet"
+            source="Admin"
+            onPressThreeDot={() => setMenuVisible(!menuVisible)}
           />
-        )}
 
-        {/* Financial Year Buttons */}
-        <View style={styles.fyContainer}>
-          {financialYears.map((year) => (
-            <TouchableOpacity
-              key={year.label}
-              style={[styles.fyButton, { width: buttonWidth }]}
-              onPress={() => handleYearSelect(year.start, year.end)}
-            >
-              <Text style={styles.fyText}>{year.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Date Inputs */}
-        <View style={styles.dateInputsContainer}>
-          <View style={styles.section}>
-            <PaymentDatePicker
-              initialDate={fromDate}
-              onDateChange={setFromDate}
+          {/* Three-dot Menu */}
+          {/* Custom Menu */}
+          {menuVisible && (
+            <AppbarMenuComponent
+              items={["Download PDF"]}
+              onItemPress={handleMenuOptionPress}
+              closeMenu={closeMenu}
             />
-          </View>
-          <View style={styles.section}>
-            <PaymentDatePicker initialDate={toDate} onDateChange={setToDate} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.goButton}
-            onPress={() => {
-              fetchbalances(fromDate, toDate); // Fetch balances based on current dates
-              fetchLedgerGroupsNew(); // Fetch ledger groups
-            }}
-          >
-            <Text style={styles.goButtonText}>Go</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Divider />
-
-        {/* Bank and Cash Balances */}
-        <View style={styles.balancesContainer}>
-          <View style={[styles.balanceCard, styles.bankCard]}>
-            <Text style={styles.balanceTitle}>Bank</Text>
-            <Text style={styles.balanceText}>
-              Opening Bal:
-              <Text style={styles.balanceTextAmt}>
-                {" "}
-                ₹ {openingBankBalance.toFixed(2)}
-              </Text>
-            </Text>
-            <Text style={styles.balanceText}>
-              Closing Bal:
-              <Text style={styles.balanceTextAmt}>
-                ₹ {closingBankBalance.toFixed(2)}
-              </Text>
-            </Text>
-          </View>
-          <View style={[styles.balanceCard, styles.cashCard]}>
-            <Text style={styles.balanceTitle}>Cash</Text>
-            <Text style={styles.balanceText}>
-              Opening Bal:
-              <Text style={styles.balanceTextAmt}>
-                {" "}
-                ₹ {openingCashBalance.toFixed(2)}
-              </Text>
-            </Text>
-            <Text style={styles.balanceText}>
-              Closing Bal:
-              <Text style={styles.balanceTextAmt}>
-                ₹ {closingCashBalance.toFixed(2)}
-              </Text>
-            </Text>
-          </View>
-        </View>
-        </View>
-    </TouchableWithoutFeedback>
-
-        <SectionList
-          sections={sectionedAccounts}
-          style={{ flex: 1 }}
-          keyExtractor={(item, index) => index.toString()}
-          renderSectionHeader={({ section: { title } }) => (
-            <TouchableOpacity
-              onPress={() => toggleSection(title)}
-              style={styles.sectionHeader}
-            >
-              <Text style={styles.sectionTitle}>{title}</Text>
-            </TouchableOpacity>
           )}
-          renderItem={({ item, section }) =>
-            expandedSections[section.title] ? (
-              <View>
-                <Text style={styles.groupTitle}>
-                  {item.group || "Unknown Group"}
+
+          {/* Financial Year Buttons */}
+          <View style={styles.fyContainer}>
+            {financialYears.map((year) => (
+              <TouchableOpacity
+                key={year.label}
+                style={[styles.fyButton, { width: buttonWidth }]}
+                onPress={() => handleYearSelect(year.start, year.end)}
+              >
+                <Text style={styles.fyText}>{year.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Date Inputs */}
+          <View style={styles.dateInputsContainer}>
+            <View style={styles.section}>
+              <PaymentDatePicker
+                initialDate={fromDate}
+                onDateChange={setFromDate}
+              />
+            </View>
+            <View style={styles.section}>
+              <PaymentDatePicker
+                initialDate={toDate}
+                onDateChange={setToDate}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.goButton}
+              onPress={() => {
+                fetchbalances(fromDate, toDate); // Fetch balances based on current dates
+                fetchLedgerGroupsNew(); // Fetch ledger groups
+              }}
+            >
+              <Text style={styles.goButtonText}>Go</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Divider />
+
+          {/* Bank and Cash Balances */}
+          <View style={styles.balancesContainer}>
+            <View style={[styles.balanceCard, styles.bankCard]}>
+              <Text style={styles.balanceTitle}>Bank</Text>
+              <Text style={styles.balanceText}>
+                Opening Bal:
+                <Text style={styles.balanceTextAmt}>
+                  {" "}
+                  ₹ {openingBankBalance.toFixed(2)}
                 </Text>
-                {item.accounts.map((account, idx) => (
-                  <View key={idx} style={styles.accountRow}>
-                    <Text
-                      style={styles.accountName}
-                    >{`   ${account.account}`}</Text>
-                    <Text style={styles.accountBalance}>
-                      ₹ {account.balance.toFixed(2)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null
-          }
-          renderSectionFooter={({ section: { title } }) => {
-            const total =
-              title === "Liabilities" ? totals.liabilities : totals.assets;
-            return (
-              <View style={styles.footerRow}>
-                <Text style={styles.totalLabel}>Total Amount</Text>
-                <Text style={styles.totalAmount}>₹ {total.toFixed(2)}</Text>
-              </View>
-            );
-          }}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No accounts to display</Text>
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-      </View>
-    
+              </Text>
+              <Text style={styles.balanceText}>
+                Closing Bal:
+                <Text style={styles.balanceTextAmt}>
+                  ₹ {closingBankBalance.toFixed(2)}
+                </Text>
+              </Text>
+            </View>
+            <View style={[styles.balanceCard, styles.cashCard]}>
+              <Text style={styles.balanceTitle}>Cash</Text>
+              <Text style={styles.balanceText}>
+                Opening Bal:
+                <Text style={styles.balanceTextAmt}>
+                  {" "}
+                  ₹ {openingCashBalance.toFixed(2)}
+                </Text>
+              </Text>
+              <Text style={styles.balanceText}>
+                Closing Bal:
+                <Text style={styles.balanceTextAmt}>
+                  ₹ {closingCashBalance.toFixed(2)}
+                </Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+
+      <SectionList
+        sections={sectionedAccounts}
+        style={{ flex: 1 }}
+        keyExtractor={(item, index) => index.toString()}
+        renderSectionHeader={({ section: { title } }) => (
+          <TouchableOpacity
+            onPress={() => toggleSection(title)}
+            style={styles.sectionHeader}
+          >
+            <Text style={styles.sectionTitle}>{title}</Text>
+          </TouchableOpacity>
+        )}
+        renderItem={({ item, section }) =>
+          expandedSections[section.title] ? (
+            <View>
+              <Text style={styles.groupTitle}>
+                {item.group || "Unknown Group"}
+              </Text>
+              {item.accounts.map((account, idx) => (
+                <View key={idx} style={styles.accountRow}>
+                  <Text
+                    style={styles.accountName}
+                  >{`   ${account.account}`}</Text>
+                  <Text style={styles.accountBalance}>
+                    ₹ {account.balance.toFixed(2)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null
+        }
+        renderSectionFooter={({ section: { title } }) => {
+          const total =
+            title === "Liabilities" ? totals.liabilities : totals.assets;
+          return (
+            <View style={styles.footerRow}>
+              <Text style={styles.totalLabel}>Total Amount</Text>
+              <Text style={styles.totalAmount}>₹ {total.toFixed(2)}</Text>
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>No accounts to display</Text>
+        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+      />
+    </View>
   );
 };
 
@@ -660,8 +660,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: { backgroundColor: "#6200ee" },
-  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+
   sectionHeader: {
     backgroundColor: "#eaeaea",
     paddingVertical: 8,
@@ -713,12 +712,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
-  fab: {
-    position: "absolute",
-    right: 16,
-    bottom: 16,
-    backgroundColor: "#6200ee",
-  },
+
   fyContainer: {
     flexDirection: "row",
     justifyContent: "space-between",

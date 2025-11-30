@@ -18,8 +18,12 @@ import Dropdown from "@/utils/DropDown";
 import PaymentDatePicker from "@/utils/paymentDate";
 import ActionModal from "@/components/ActionModal";
 import { pickImage, captureImage, uploadViaApi } from "@/utils/imagekitUtils";
+import { sendInAppMessage } from "@/utils/sendInAppMessage";
+import { fetchAdminIds } from "@/utils/fetchAdminIds";
+import { useAuthRole } from "@/lib/authRole";
 
 const PaymentModeScreen = () => {
+  const { userName } = useAuthRole();
   const societyContext = useSociety();
   // Determine which context to use based on source
   const societyName = societyContext.societyName;
@@ -30,9 +34,12 @@ const PaymentModeScreen = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
+
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
   const [loading, setLoading] = useState(false);
 
   const { paymentmode, amount, selectedIds, selectedBills } =
@@ -41,7 +48,19 @@ const PaymentModeScreen = () => {
   // alias to camelCase for convenience
   const paymentMode = paymentmode as string;
 
-  const parsedSelectedIds = JSON.parse(selectedIds as string);
+  // const parsedSelectedIds = JSON.parse(selectedIds as string);
+  let parsedSelectedIds: any[] = [];
+  try {
+    parsedSelectedIds =
+      selectedIds && selectedIds !== "undefined"
+        ? JSON.parse(selectedIds as string)
+        : [];
+  } catch (err) {
+    console.warn("Invalid selectedIds JSON:", selectedIds);
+    console.log("err", err);
+    parsedSelectedIds = [];
+  }
+
   const router = useRouter();
   // const [balancesheet, setBalancesheet] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
@@ -131,6 +150,7 @@ const PaymentModeScreen = () => {
 
       // Define document fields
       const docData = {
+        societyName: societyName,
         status: "Uncleared",
         amount: parseFloat(amount as string),
         amountPaid: parseFloat(amount as string),
@@ -169,6 +189,25 @@ const PaymentModeScreen = () => {
         await updateDoc(billDocRef, { status: "Pending Approval" });
         console.log(`Updated bill ${billId} to Pending Approval`);
       }
+
+      // 🔹 Send in-app message to all admins only
+      const adminIds = await fetchAdminIds(societyName as string);
+
+      const title = `Add Money`;
+      const body = `${wing} ${flatNumber} ${userName} | Receipt `;
+
+      await Promise.all(
+        adminIds.map((adminId) =>
+          sendInAppMessage(
+            societyName as string,
+            adminId,
+            title,
+            body,
+            "Receipt",
+            `/admin/Collection` // 🔹 optional path
+          )
+        )
+      );
 
       Alert.alert(
         "Cash",
@@ -328,32 +367,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveButtonText: { color: "#fff", fontSize: 16 },
-  dropdownContainer: {
-    marginBottom: 15,
-  },
-  dateInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#000",
-    backgroundColor: "#fff", // Match container background
-    borderWidth: 0, // Remove border
-    paddingVertical: 4, // Adjust padding for alignment
-  },
-  calendarIcon: {
-    fontSize: 22, // Match size with TextInput
-    color: "#aaa",
-    marginLeft: 8, // Provide spacing
-  },
-  dateInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 0,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 8, // Adjust horizontal padding
-    marginBottom: 16,
-    backgroundColor: "#fff", // Match container background
-  },
   image: {
     width: 200,
     height: 200,

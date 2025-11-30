@@ -15,13 +15,15 @@ import { collectionGroup, getDocs, query, where } from "firebase/firestore";
 const ClosedComplainsAdmin = () => {
   const router = useRouter();
   const { societyName } = useSociety();
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+  const customComplainSubcollectionName = "complains";
   const [complainData, setComplainData] = useState<any[]>([]);
   const fetchComplainData = async () => {
     try {
       // Query: Fetch all complaints where status != "Open"
       const openComplaintsQuery = query(
         collectionGroup(db, customComplainSubcollectionName),
+        where("societyName", "==", societyName),
         where("status", "!=", "Open") // Fetch only Open complaints
       );
 

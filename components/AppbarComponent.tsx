@@ -1,12 +1,15 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { Appbar } from 'react-native-paper';
+import React from "react";
+import { StyleSheet, StatusBar } from "react-native";
+import { Appbar } from "react-native-paper";
+import { useRouter, Href } from "expo-router";
 
 interface AppbarComponentProps {
   title: string;
   source?: string;
   onPressFilter?: () => void;
   onPressThreeDot?: () => void;
+  onPressSearch?: () => void; // 👈 NEW PROP
+  backRoute?: Href; // 👈 NEW PROP
 }
 
 const AppbarComponent: React.FC<AppbarComponentProps> = ({
@@ -14,26 +17,65 @@ const AppbarComponent: React.FC<AppbarComponentProps> = ({
   source,
   onPressFilter,
   onPressThreeDot,
+  onPressSearch, // 👈 destructure it
+  backRoute, // 👈 destructure it
 }) => {
-  const backgroundColor = source === 'Admin' ? '#6200ee' : '#2196F3';
+  const router = useRouter();
+  const backgroundColor =
+    source === "Admin"
+      ? "#6200ee"
+      : source === "GateKeeper"
+        ? "#353839"
+        : source === "Login"
+          ? "#00AEEF"
+          : "#2196F3"; // default for others
 
   return (
-    <Appbar.Header style={[styles.header, { backgroundColor }]}>
-      <Appbar.BackAction onPress={() => console.log('Back pressed')} color="#fff" />
-      <Appbar.Content title={title} titleStyle={styles.titleStyle} />
-      {onPressFilter && (
-        <Appbar.Action icon="filter" onPress={onPressFilter} color="#fff" />
-      )}
-      {onPressThreeDot && (
-        <Appbar.Action icon="dots-vertical" onPress={onPressThreeDot} color="#fff" />
-      )}
-    </Appbar.Header>
+    <>
+      {/* ✅ Set StatusBar color & text style */}
+      <StatusBar
+        // translucent={false}
+        backgroundColor={backgroundColor}
+        barStyle="light-content"
+        // animated={true}
+      />
+
+      <Appbar.Header style={[styles.header, { backgroundColor }]}>
+        {/* 👇 Use backRoute if provided, else default to router.back() */}
+        <Appbar.BackAction
+          onPress={() => {
+            if (backRoute) router.replace(backRoute);
+            else router.back();
+          }}
+          color="#fff"
+        />
+        {/* 👇 Title */}
+        <Appbar.Content title={title} titleStyle={styles.titleStyle} />
+
+        {/* 👇 Optional Buttons */}
+        {onPressSearch && (
+          <Appbar.Action icon="magnify" onPress={onPressSearch} color="#fff" />
+        )}
+
+        {onPressFilter && (
+          <Appbar.Action icon="filter" onPress={onPressFilter} color="#fff" />
+        )}
+
+        {onPressThreeDot && (
+          <Appbar.Action
+            icon="dots-vertical"
+            onPress={onPressThreeDot}
+            color="#fff"
+          />
+        )}
+      </Appbar.Header>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#6200ee', // Default color if none is provided
+    backgroundColor: "#6200ee", // Default color if none is provided
   },
   titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
 });

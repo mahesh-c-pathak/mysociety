@@ -8,7 +8,7 @@ import {
   ScrollView,
   Alert,
   TouchableWithoutFeedback,
-
+  FlatList,
 } from "react-native";
 import React, { useEffect, useState } from "react";
 
@@ -26,10 +26,7 @@ import {
 } from "firebase/firestore";
 import { useSociety } from "@/utils/SocietyContext";
 
-import {
-  useLocalSearchParams,
-  useRouter,
-} from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import AppbarComponent from "@/components/AppbarComponent";
 import AppbarMenuComponent from "@/components/AppbarMenuComponent";
@@ -41,6 +38,7 @@ type FlatData = {
   flatType: string;
   resident: string;
   memberStatus: string;
+  flatbillNumber: string;
   ownerRegisterd?: string; // Optional property
   renterRegisterd?: string; // Optional property
   billStatus: string;
@@ -79,16 +77,19 @@ const StatusColor: Record<string, string> = {
 
 const BillDetailNew = () => {
   const { title, id } = useLocalSearchParams();
+  // console.log("master bill id", id);
   const router = useRouter();
   const { societyName: mysocietyName } = useSociety();
   const [loading, setLoading] = useState(true);
 
-  const customWingsSubcollectionName = `${mysocietyName} wings`;
-  const customFloorsSubcollectionName = `${mysocietyName} floors`;
   const customFlatsSubcollectionName = `${mysocietyName} flats`;
-  const customFlatsBillsSubcollectionName = `${mysocietyName} bills`;
-  const specialBillCollectionName = `specialBills_${mysocietyName}`;
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${mysocietyName}`;
+  // const customFlatsBillsSubcollectionName = `${mysocietyName} bills`;
+
+  const customFlatsBillsSubcollectionName = "flatbills";
+
+  // const specialBillCollectionName = `specialBills_${mysocietyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${mysocietyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const [flatsData, setFlatsData] = useState<FlatsData>({}); // Explicit type for flatsData
   const [flatTypeCounts, setFlatTypeCounts] = useState<Record<string, number>>(
@@ -99,6 +100,8 @@ const BillDetailNew = () => {
 
   const currentDate = new Date().toISOString().split("T")[0];
 
+  // console.log("flatsData", flatsData);
+
   useEffect(() => {
     fetchFlatsData();
   }, []);
@@ -108,6 +111,7 @@ const BillDetailNew = () => {
     try {
       const q = query(
         collectionGroup(db, customFlatsBillsSubcollectionName),
+        where("societyName", "==", mysocietyName),
         where("name", "==", title) // 'id' must be a field in your documents
       );
 
@@ -127,6 +131,7 @@ const BillDetailNew = () => {
               billStatus: string;
               overdueDays: number;
               billAmount: number;
+              flatbillNumber: string;
             }
           >
         >
@@ -134,11 +139,13 @@ const BillDetailNew = () => {
 
       flatsBillSnapshot.forEach((doc) => {
         const billsData = doc.data();
+        const flatbillNumber = doc.id;
         const billStatus = billsData.status as string; // Ensure it's a string
         const billDueDate = billsData.dueDate;
         const billAmount = billsData.amount || 0; // Default to 0 if amount is missing
         const billsPath = doc.ref.path;
         const pathSegments = billsPath.split("/");
+        // console.log("billsPath", billsPath);
 
         const wing = pathSegments[3];
         const floor = pathSegments[5];
@@ -168,6 +175,7 @@ const BillDetailNew = () => {
           billStatus: finalBillStatus,
           overdueDays,
           billAmount,
+          flatbillNumber,
         };
       });
 
@@ -202,6 +210,7 @@ const BillDetailNew = () => {
           billStatus: billInfo.billStatus,
           overdueDays: billInfo.overdueDays, // Add overdue days to the state
           billAmount: billInfo.billAmount, // Add bill amount to the state
+          flatbillNumber: billInfo.flatbillNumber,
         };
 
         // console.log("billInfo.billStatus", billInfo.billStatus)
@@ -215,7 +224,7 @@ const BillDetailNew = () => {
       setLoading(false);
     }
   };
- 
+
   useEffect(() => {
     // Set the first wing as selected when flatsData is loaded
     if (!selectedWing && Object.keys(flatsData).length > 0) {
@@ -243,7 +252,8 @@ const BillDetailNew = () => {
     flatType: string,
     floor: string,
     wing: string,
-    billStatus: string
+    billStatus: string,
+    flatbillNumber: string
   ) => {
     console.log(
       `Yes pressed for flat: ${flatId}, flatType: ${flatType}, Floor: ${floor}, Wing: ${wing}, billStatus: ${billStatus}`
@@ -255,9 +265,10 @@ const BillDetailNew = () => {
         wing: selectedWing,
         floorName: floor,
         flatNumber: flatId,
-        billNumber: id,
+        billNumber: flatbillNumber,
         flatType,
         billStatus,
+        id,
       },
     });
   };
@@ -265,67 +276,76 @@ const BillDetailNew = () => {
   const renderFlats = () => {
     if (!selectedWing || !flatsData[selectedWing]) return null;
 
-    return (
-      <View style={styles.outerscrollContent}>
-        <ScrollView horizontal style={styles.scrollView}>
-          <View style={styles.scrollContent}>
-            {Object.keys(flatsData[selectedWing]).map((floor) => (
-              <View key={floor} style={styles.floorContainer}>
-                <View style={styles.row}>
-                  {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
-                    const flatData = flatsData[selectedWing][floor][flat];
-                    const flatColor =
-                      flatColors[flatData.billStatus] || flatColors["No Bill"]; // Default to No Bill color if flatType is missing
-                    return (
-                      <TouchableOpacity
-                        key={flat}
-                        style={[
-                          styles.flatContainer,
-                          { backgroundColor: flatColor },
-                        ]}
-                        onPress={() =>
-                          handleFlatPress(
-                            flat,
-                            flatData.flatType,
-                            floor,
-                            selectedWing,
-                            flatData.billStatus
-                          )
-                        }
-                      >
-                        <Text style={styles.flatText}>{flat}</Text>
-                        {flatData.billStatus.toLowerCase() === "unpaid" && (
-                          <Text style={styles.billText}>
-                            Bill: {flatData.billAmount}
-                          </Text>
-                        )}
-                        {flatData.billStatus === "Overdue" && (
-                          <>
-                            <Text style={styles.billText}>
-                              {flatData.overdueDays} days
-                            </Text>
-                            <Text style={styles.billText}>
-                              ₹ {flatData.billAmount}
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
+    const floors = Object.keys(flatsData[selectedWing]);
+
+    const renderFloor = ({ item: floor }: any) => {
+      const flats = Object.keys(flatsData[selectedWing][floor]);
+
+      return (
+        <View style={styles.floorContainer}>
+          <View style={styles.row}>
+            {flats.map((flat) => {
+              const flatData = flatsData[selectedWing][floor][flat];
+              const flatColor =
+                flatColors[flatData.billStatus] || flatColors["No Bill"];
+
+              return (
+                <TouchableOpacity
+                  key={flat}
+                  style={[styles.flatContainer, { backgroundColor: flatColor }]}
+                  onPress={() =>
+                    handleFlatPress(
+                      flat,
+                      flatData.flatType,
+                      floor,
+                      selectedWing,
+                      flatData.billStatus,
+                      flatData.flatbillNumber // <-- NEW
+                    )
+                  }
+                >
+                  <Text style={styles.flatText}>{flat}</Text>
+
+                  {flatData.billStatus.toLowerCase() === "unpaid" && (
+                    <Text style={styles.billText}>
+                      Bill: {flatData.billAmount}
+                    </Text>
+                  )}
+
+                  {flatData.billStatus === "Overdue" && (
+                    <>
+                      <Text style={styles.billText}>
+                        {flatData.overdueDays} days
+                      </Text>
+                      <Text style={styles.billText}>
+                        ₹ {flatData.billAmount}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        </ScrollView>
-      </View>
+        </View>
+      );
+    };
+
+    return (
+      <ScrollView style={styles.scrollcontainer} horizontal={true}>
+        <FlatList
+          data={floors}
+          renderItem={renderFloor}
+          keyExtractor={(item) => item}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        />
+      </ScrollView>
     );
   };
 
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const handleDeleteBill = async (billNumber: string) => {
-    console.log("billNumber", billNumber);
-
+  const handleDeleteBillNew = async () => {
     Alert.alert(
       "Confirmation",
       "Are you sure to delete? You can't recover this data.",
@@ -334,162 +354,151 @@ const BillDetailNew = () => {
         {
           text: "Yes",
           onPress: async () => {
-            console.log(`Deleting bill ${billNumber}`);
-            setLoading(true);
-            const mainBillRef = `Societies/${mysocietyName}/${specialBillCollectionName}/${billNumber}`;
-            const mainBillDocRef = doc(db, mainBillRef);
-
             try {
-              // Run both Firestore queries concurrently
-              const [mainBillDocSnap, flatsBillSnapshot] = await Promise.all([
-                getDoc(mainBillDocRef),
-                getDocs(collectionGroup(db, customFlatsBillsSubcollectionName)),
-              ]);
-
-              if (!mainBillDocSnap.exists()) {
-                console.error("Main bill document does not exist.");
+              setLoading(true);
+              const mainBillRef = `Bills/${id}`;
+              const mainBillDocRef = doc(db, mainBillRef);
+              const billsSnapshot = await getDoc(mainBillDocRef);
+              if (!billsSnapshot.exists()) {
+                console.warn("mainBillDocSnap does not exist.");
                 return;
               }
 
-              const mainBillData = mainBillDocSnap.data();
-              const billItems = mainBillData?.items || [];
+              const billsData = billsSnapshot.data();
 
-              // First process each flat bill
+              const { flatPaths, billNumbers } = billsData;
 
-              for (const flatBillDoc of flatsBillSnapshot.docs) {
-                // Use for...of instead of forEach
-                const flatbillId = flatBillDoc.id;
+              for (let i = 0; i < flatPaths.length; i++) {
+                const flatRef = flatPaths[i];
 
-                if (flatbillId === billNumber) {
-                  const billsPerFlatData = flatBillDoc.data();
-                  const status = billsPerFlatData.status;
+                const billId = billNumbers[i];
 
-                  const billsPath = flatBillDoc.ref.path;
-                  const pathSegments = billsPath.split("/");
-                  const wing = pathSegments[3];
-                  const floor = pathSegments[5];
-                  const flat = pathSegments[7];
-                  const flatType = flatsData?.[wing]?.[floor]?.[flat]?.flatType;
-                  // console.log(`Flat Type for ${wing} - Floor ${floor} - Flat ${flat}:`, flatType);
+                const flatBillPathRef = `${flatRef}/${customFlatsBillsSubcollectionName}/${billId}`;
+                const flatBillDocRef = doc(db, flatBillPathRef);
+                const flatBillDocSnap = await getDoc(flatBillDocRef);
+                if (!flatBillDocSnap.exists()) {
+                  console.warn("Flat bill does NOT exist:", flatBillPathRef);
+                  continue; // skip this entry
+                }
 
-                  if (status === "unpaid") {
-                    for (const item of billItems) {
-                      const amountledger =
-                        flatType === "Closed"
-                          ? item.closedUnitAmount
-                          : flatType === "Rent"
-                          ? item.rentAmount
-                          : item.ownerAmount;
+                const flatBillDetails = flatBillDocSnap.data();
 
-                      // console.log('amountledger', amountledger);
-                      // console.log(item.ledgerAccount);
-                      // console.log(item.updatedLedgerAccount);
-                      // console.log(item.groupFrom);
+                const status = flatBillDetails.status;
+                const isEnablePenalty = flatBillDetails.isEnablePenalty;
 
-                      // Update item ledger and account receivable. Date is current date when bill is deleted
-                      const ledgerUpdate = await updateLedger(
-                        mysocietyName,
-                        "Account Receivable",
-                        item.updatedLedgerAccount,
-                        amountledger,
-                        "Subtract",
-                        currentDate
-                      );
-                      console.log(
-                        `Account Receivable Ledger Update Status: ${ledgerUpdate}`
-                      );
+                if (status === "unpaid") {
+                  const billTotals = flatBillDetails.billItemTotals || {};
+                  for (const key in billTotals) {
+                    const [ledgerGroup, ledgerAccount] = key.split("||");
+                    const amount = billTotals[key];
+                    const ledgerAccountReceivables = `${ledgerAccount} Receivables`;
 
-                      const ledgerUpdate2 = await updateLedger(
-                        mysocietyName,
-                        item.groupFrom,
-                        item.ledgerAccount,
-                        amountledger,
-                        "Subtract",
-                        currentDate
-                      );
-                      console.log(
-                        `Item Ledger Update Status: ${ledgerUpdate2}`
-                      );
-                    }
-                  } else if (status === "paid") {
-                    // Handle paid status
-                    // update item ledger
-                    for (const item of billItems) {
-                      const amountledger =
-                        flatType === "Closed"
-                          ? item.closedUnitAmount
-                          : flatType === "Rent"
-                          ? item.rentAmount
-                          : item.ownerAmount;
-                      // Update item ledger account. Date is current date when bill is deleted
-                      const ledgerUpdate2 = await updateLedger(
-                        mysocietyName,
-                        item.groupFrom,
-                        item.ledgerAccount,
-                        amountledger,
-                        "Subtract",
-                        currentDate
-                      );
-                      console.log(
-                        ` item Ledger Update Status: ${ledgerUpdate2}`
-                      );
-                    }
+                    // 1. Reverse the income/expense ledger
+                    const itemledgerUpdate = await updateLedger(
+                      mysocietyName,
+                      ledgerGroup,
+                      ledgerAccount,
+                      amount,
+                      "Subtract",
+                      currentDate
+                    );
+                    console.log(
+                      `Item Ledger Update Status: ${itemledgerUpdate}`
+                    );
 
-                    // update penalty if exists
-                    if (mainBillData!.isEnablePenalty) {
-                      const penaltyAmount = billsPerFlatData.penaltyAmount;
-                      const billpaidLedgerAccount =
-                        billsPerFlatData.ledgerAccountPenalty;
-                      const billpaidLedgerGroup =
-                        billsPerFlatData.ledgerAccountGroupPenalty;
+                    // 2. Reverse the Account Receivable entry
+                    const ledgerUpdateReceivables = await updateLedger(
+                      mysocietyName,
+                      "Account Receivable",
+                      ledgerAccountReceivables, // OR a constant AR account if you use one
+                      amount,
+                      "Subtract",
+                      currentDate
+                    );
+                    console.log(
+                      `Account Receivable Ledger Update Status: ${ledgerUpdateReceivables}`
+                    );
+                  }
+                } else if (status === "paid") {
+                  // Handle paid status
+                  const billTotals = flatBillDetails.billItemTotals || {};
 
-                      const LedgerUpdate = await updateLedger(
-                        mysocietyName,
-                        billpaidLedgerGroup,
-                        billpaidLedgerAccount,
-                        penaltyAmount,
-                        "Subtract",
-                        currentDate
-                      ); // Update Ledger
-                      console.log(
-                        ` Penalty Ledger Update Status: ${LedgerUpdate}`
-                      );
-                    }
+                  for (const key in billTotals) {
+                    const [ledgerGroup, ledgerAccount] = key.split("||");
+                    const amount = billTotals[key];
 
-                    // Update Unclread balance selectedBills and selectedIds
-                    const transactionId = billsPerFlatData.transactionId;
-                    const unclearedBalanceRef = `Societies/${mysocietyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flat}/${unclearedBalanceSubcollectionName}/${transactionId}`;
-                    const unclearedBalanceDocRef = doc(db, unclearedBalanceRef);
-                    const docSnap = await getDoc(unclearedBalanceDocRef);
-                    if (docSnap.exists()) {
-                      const data = docSnap.data();
-                      // Bill number to delete
-                      const billToDelete = billNumber;
+                    // Only reverse item  ledger
+                    const paidStatusledgerUpdate = await updateLedger(
+                      mysocietyName,
+                      ledgerGroup,
+                      ledgerAccount,
+                      amount,
+                      "Subtract",
+                      currentDate
+                    );
+                    console.log(
+                      ` paid status item Ledger Update Status: ${paidStatusledgerUpdate}`
+                    );
+                  }
 
-                      // Remove from selectedIds
-                      const updatedSelectedIds =
-                        data.selectedIds?.filter(
-                          (id: string) => id !== billToDelete
-                        ) || [];
-                      // Remove from selectedBills
-                      const updatedSelectedBills =
-                        data.selectedBills?.filter(
-                          (bill: any) => bill.id !== billToDelete
-                        ) || [];
-                      // Update Firestore document
-                      await updateDoc(unclearedBalanceDocRef, {
-                        selectedIds: updatedSelectedIds,
-                        selectedBills: updatedSelectedBills,
-                        type: "Bill Deleted",
-                      });
-                      console.log(
-                        "Bill successfully deleted from uncleared balance."
-                      );
-                    }
+                  // update penalty if exists
+                  if (isEnablePenalty) {
+                    const penaltyAmount = billsData.penaltyAmount;
+                    const billpaidLedgerAccount =
+                      billsData.ledgerAccountPenalty;
+                    const billpaidLedgerGroup =
+                      billsData.ledgerAccountGroupPenalty;
+
+                    const LedgerUpdate = await updateLedger(
+                      mysocietyName,
+                      billpaidLedgerGroup,
+                      billpaidLedgerAccount,
+                      penaltyAmount,
+                      "Subtract",
+                      currentDate
+                    ); // Update Ledger
+                    console.log(
+                      ` Penalty Ledger Update Status: ${LedgerUpdate}`
+                    );
+                  } // end if isenablepenalty
+                  // Update Unclread balance selectedBills and selectedIds
+                  const transactionId = flatBillDetails.transactionId;
+                  const unclearedBalanceRef = `${flatRef}/${unclearedBalanceSubcollectionName}/${transactionId}`;
+                  const unclearedBalanceDocRef = doc(db, unclearedBalanceRef);
+                  const docSnap = await getDoc(unclearedBalanceDocRef);
+                  let amountReceived = 0;
+
+                  if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    // Bill number to delete
+                    const billToDelete = billId;
+                    amountReceived = data.amountReceived;
+
+                    // Remove from selectedIds
+                    const updatedSelectedIds =
+                      data.selectedIds?.filter(
+                        (id: string) => id !== billToDelete
+                      ) || [];
+                    // Remove from selectedBills
+                    const updatedSelectedBills =
+                      data.selectedBills?.filter(
+                        (bill: any) => bill.id !== billToDelete
+                      ) || [];
+                    // Update Firestore document
+                    await updateDoc(unclearedBalanceDocRef, {
+                      selectedIds: updatedSelectedIds,
+                      selectedBills: updatedSelectedBills,
+                      type: "Bill Deleted",
+                    });
+                    console.log(
+                      "Bill successfully deleted from uncleared balance."
+                    );
                     // Add the deleted Amount to current Balance
-                    const receiptAmount = billsPerFlatData.receiptAmount;
-                    const currentBalanceSubcollectionName = `currentBalance_${flat}`;
-                    const currentbalanceCollectionRef = `Societies/${mysocietyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flat}/${currentBalanceSubcollectionName}`;
+                    const receiptAmount = amountReceived;
+                    // const currentBalanceSubcollectionName = `currentBalance_${flat}`;
+                    const currentBalanceSubcollectionName =
+                      "flatCurrentBalance";
+                    const currentbalanceCollectionRef = `${flatRef}/${currentBalanceSubcollectionName}`;
                     const currentbalanceCollectionDocRef = collection(
                       db,
                       currentbalanceCollectionRef
@@ -499,7 +508,8 @@ const BillDetailNew = () => {
                       currentbalanceCollectionDocRef,
                       receiptAmount,
                       "Add",
-                      currentDate
+                      currentDate,
+                      mysocietyName
                     );
                     console.log("Balance update result:", result);
                     const result2 = await updateLedger(
@@ -512,19 +522,16 @@ const BillDetailNew = () => {
                     ); // Update Ledger
                     console.log("Members Advanced update result:", result2);
                   }
-                  // After Ledger Updates, Delete the bill from the "customFlatsBillsSubcollectionName" collection
+                } // end else if status
 
-                  const flatBillRef = `Societies/${mysocietyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floor}/${customFlatsSubcollectionName}/${flat}/${customFlatsBillsSubcollectionName}/${billNumber}`;
-                  const flatBillDocRef = doc(db, flatBillRef);
-                  await deleteDoc(flatBillDocRef);
-                  console.log("Deleted Bill", billNumber, "From Flat", flat);
-                }
-              } // for of loop
+                await deleteDoc(flatBillDocRef);
+                console.log("Deleted Bill", "From Flat");
+              } // end for flatPath
               // After flat bills delete main bill
-              await deleteDoc(mainBillDocRef);
 
+              await deleteDoc(mainBillDocRef);
               // After delete route to "Generate special bill index screen /(SpecialBills) "
-              Alert.alert("Success", "Bill  deleted successfully.");
+              Alert.alert("Success", "All Bills  deleted successfully.");
               router.replace({
                 pathname: "/admin/Bills/SpecialBills",
               });
@@ -533,16 +540,16 @@ const BillDetailNew = () => {
             } finally {
               setLoading(false);
             }
-          }, // onpress
+          }, // end onPress
         },
       ]
-    );
-  };
+    ); // end alert
+  }; // end handleDeleteBillNew
 
   const handleMenuOptionPress = (option: string) => {
     console.log(`${option} selected`);
     if (option === "Delete") {
-      handleDeleteBill(id as string);
+      handleDeleteBillNew();
     }
     setMenuVisible(false);
   };
@@ -655,19 +662,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFFFFF",
   },
+  scrollcontainer: {
+    margin: 16,
+    flexGrow: 1,
+    backgroundColor: "#DAD8C9",
+    padding: 8,
+    marginBottom: 80, // ✅ adds visible gap from bottom
+  },
   loaderContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  header: {
-    backgroundColor: "#6200ee", // Match background color from the attached image
-    elevation: 4,
-  },
-  titleStyle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
   },
   toggleContainer: {
     flexDirection: "row",
@@ -701,11 +706,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  flatList: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
   flatText: {
     color: "#FFFFFF",
     fontWeight: "bold",
@@ -723,29 +723,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 8,
   },
-  scrollView: {
-    flexGrow: 0,
-  },
-  outerscrollContent: {
-    margin: 16,
-    paddingHorizontal: 4,
-    paddingTop: 8,
-    backgroundColor: "#dddddd",
-
-    borderWidth: 1, // Optional for outline
-    borderColor: "#e0e0e0", // Optional for outline
-    borderRadius: 8,
-  },
   scrollContent: {
     flexDirection: "column", // Stack floors vertically
     paddingHorizontal: 16,
   },
   floorContainer: {
-    marginBottom: 8,
-  },
-  floorTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
     marginBottom: 8,
   },
   row: {
@@ -784,69 +766,5 @@ const styles = StyleSheet.create({
   },
   legendcountContainer: {
     flexDirection: "row",
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // Dimmed background
-  },
-  modalContent: {
-    width: "80%", // Adjust modal width
-    backgroundColor: "#fff", // Modal background color
-    borderRadius: 10, // Rounded corners
-    padding: 20, // Inner padding
-    alignItems: "center", // Center content horizontally
-    shadowColor: "#000", // Shadow for iOS
-    shadowOffset: { width: 0, height: 2 }, // Shadow position
-    shadowOpacity: 0.25, // Shadow transparency
-    shadowRadius: 4, // Shadow blur radius
-    elevation: 5, // Shadow for Android
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  modalButtons: {
-    flexDirection: "row", // Arrange buttons horizontally
-    justifyContent: "space-around", // Space between buttons
-    width: "100%",
-  },
-  button: {
-    padding: 10,
-    borderRadius: 5,
-    minWidth: 80,
-    alignItems: "center",
-  },
-  buttonYes: {
-    backgroundColor: "#2196F3", // Blue for Yes
-  },
-  buttonNo: {
-    backgroundColor: "#FFA500", // Orange for No
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    borderRadius: 20,
-    padding: 5,
   },
 });

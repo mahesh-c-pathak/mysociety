@@ -19,8 +19,6 @@ const ClosedTasksAdmin = () => {
   const { societyName } = useSociety();
   const insets = useSafeAreaInsets();
 
-  // const customComplainSubcollectionName = `${societyName} complains`;
-
   const customTasksCollectionName = `Tasks_${societyName}`;
 
   const [tasksData, setTasksData] = useState<any[]>([]);

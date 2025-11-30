@@ -4,7 +4,9 @@ import { Card, Text, useTheme, Appbar } from "react-native-paper";
 import { useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-type MaterialCommunityIconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type MaterialCommunityIconName = React.ComponentProps<
+  typeof MaterialCommunityIcons
+>["name"];
 
 type ValidRoutes =
   | "/admin/Accounting/Vouchers/Expense"
@@ -25,21 +27,65 @@ type VoucherItem = {
 };
 
 const vouchers: VoucherItem[] = [
-  { id: "1", title: "Expense", icon: "credit-card", route: "/admin/Accounting/Vouchers/Expense" },
-  { id: "2", title: "Income", icon: "cash", route: "/admin/Accounting/Vouchers/Income" },
-  { id: "3", title: "Receipt", icon: "receipt", route: "/admin/Accounting/Vouchers/Receipt" },
-  { id: "4", title: "Purchase", icon: "cart", route: "/admin/Accounting/Vouchers/Purchase" },
-  { id: "5", title: "Cash Withdrawal", icon: "arrow-up", route: "/admin/Accounting/Vouchers/Cash-Withdrawal" },
-  { id: "6", title: "Cash Deposit", icon: "arrow-down", route: "/admin/Accounting/Vouchers/Cash-Deposit" },
-  { id: "7", title: "Cash to Cash Transfer", icon: "swap-horizontal", route: "/admin/Accounting/Vouchers/Cash-To-Cash-Transfer" },
-  { id: "8", title: "Bank to Bank Transfer", icon: "bank", route: "/admin/Accounting/Vouchers/Bank-To-Bank-Transfer" },
-  { id: "9", title: "Journal", icon: "book", route: "/admin/Accounting/Vouchers/Journal" },
+  {
+    id: "1",
+    title: "Expense",
+    icon: "credit-card",
+    route: "/admin/Accounting/Vouchers/Expense",
+  },
+  {
+    id: "2",
+    title: "Income",
+    icon: "cash",
+    route: "/admin/Accounting/Vouchers/Income",
+  },
+  {
+    id: "3",
+    title: "Receipt",
+    icon: "receipt",
+    route: "/admin/Accounting/Vouchers/Receipt",
+  },
+  {
+    id: "4",
+    title: "Purchase",
+    icon: "cart",
+    route: "/admin/Accounting/Vouchers/Purchase",
+  },
+  {
+    id: "5",
+    title: "Cash Withdrawal",
+    icon: "arrow-up",
+    route: "/admin/Accounting/Vouchers/Cash-Withdrawal",
+  },
+  {
+    id: "6",
+    title: "Cash Deposit",
+    icon: "arrow-down",
+    route: "/admin/Accounting/Vouchers/Cash-Deposit",
+  },
+  {
+    id: "7",
+    title: "Cash to Cash Transfer",
+    icon: "swap-horizontal",
+    route: "/admin/Accounting/Vouchers/Cash-To-Cash-Transfer",
+  },
+  {
+    id: "8",
+    title: "Bank to Bank Transfer",
+    icon: "bank",
+    route: "/admin/Accounting/Vouchers/Bank-To-Bank-Transfer",
+  },
+  {
+    id: "9",
+    title: "Journal",
+    icon: "book",
+    route: "/admin/Accounting/Vouchers/Journal",
+  },
 ];
 
 const Index: React.FC = () => {
   const theme = useTheme();
   const router = useRouter();
-  
 
   const renderItem = ({ item }: { item: VoucherItem }) => (
     <Card
@@ -63,7 +109,7 @@ const Index: React.FC = () => {
         <Appbar.BackAction onPress={() => router.back()} color="#fff" />
         <Appbar.Content title="Vouchers" titleStyle={styles.titleStyle} />
       </Appbar.Header>
-      
+
       <FlatList
         data={vouchers}
         keyExtractor={(item) => item.id}
@@ -90,7 +136,7 @@ const styles = StyleSheet.create({
     margin: 8,
     alignItems: "center",
     justifyContent: "center",
-    height: 100,
+    height: 120,
     borderRadius: 8,
     elevation: 2,
   },

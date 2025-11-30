@@ -17,61 +17,64 @@ const OpenComplains = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { societyName, wing, flatNumber } = useSociety();
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+
+  const customComplainSubcollectionName = "complains";
 
   const [complainData, setComplainData] = useState<any[]>([]);
 
-  const fetchComplainData = async () => {
-    try {
-      // Query 1: classification = "Public"
-      const publicQuery = query(
-        collectionGroup(db, customComplainSubcollectionName),
-        where("classification", "==", "Public"),
-        where("status", "==", "Open") // Ensuring status is Open
-      );
-
-      // Query 2: createdBy = "A 101"
-      const createdByQuery = query(
-        collectionGroup(db, customComplainSubcollectionName),
-        where("createdBy", "==", `${wing} ${flatNumber}`),
-        where("status", "==", "Open") // Ensuring status is Open
-      );
-
-      // Fetch both queries
-      const [publicSnapshot, createdBySnapshot] = await Promise.all([
-        getDocs(publicQuery),
-        getDocs(createdByQuery),
-      ]);
-
-      // Extract data
-      const publicComplaints = publicSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      const createdByComplaints = createdBySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      // Merge results and remove duplicates (in case any overlap exists)
-      const mergedComplaints = [
-        ...publicComplaints,
-        ...createdByComplaints.filter(
-          (complaint) => !publicComplaints.some((c) => c.id === complaint.id)
-        ),
-      ];
-
-      // console.log("Complaints:", mergedComplaints);
-      setComplainData(mergedComplaints);
-    } catch (error) {
-      console.error("Error fetching complaints:", error);
-    }
-  };
-
   useEffect(() => {
+    const fetchComplainData = async () => {
+      try {
+        // Query 1: classification = "Public"
+        const publicQuery = query(
+          collectionGroup(db, customComplainSubcollectionName),
+          where("societyName", "==", societyName),
+          where("classification", "==", "Public"),
+          where("status", "==", "Open") // Ensuring status is Open
+        );
+
+        // Query 2: createdBy = "A 101"
+        const createdByQuery = query(
+          collectionGroup(db, customComplainSubcollectionName),
+          where("societyName", "==", societyName),
+          where("createdBy", "==", `${wing} ${flatNumber}`),
+          where("status", "==", "Open") // Ensuring status is Open
+        );
+
+        // Fetch both queries
+        const [publicSnapshot, createdBySnapshot] = await Promise.all([
+          getDocs(publicQuery),
+          getDocs(createdByQuery),
+        ]);
+
+        // Extract data
+        const publicComplaints = publicSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        const createdByComplaints = createdBySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        // Merge results and remove duplicates (in case any overlap exists)
+        const mergedComplaints = [
+          ...publicComplaints,
+          ...createdByComplaints.filter(
+            (complaint) => !publicComplaints.some((c) => c.id === complaint.id)
+          ),
+        ];
+
+        // console.log("Complaints:", mergedComplaints);
+        setComplainData(mergedComplaints);
+      } catch (error) {
+        console.error("Error fetching complaints:", error);
+      }
+    };
     fetchComplainData();
-  }, []);
+  }, [customComplainSubcollectionName, flatNumber, wing]);
 
   const renderComplain = ({ item }: { item: any }) => (
     <View style={styles.cardview}>
@@ -134,7 +137,7 @@ const OpenComplains = () => {
         icon="plus"
         color="white" // Set the icon color to white
         onPress={() => {
-          router.push("/member/Complains/addComplain");
+          router.push("/member/Complains/addComplain?source=Member");
         }}
       />
     </View>

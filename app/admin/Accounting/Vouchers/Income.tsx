@@ -1,20 +1,22 @@
-import React, { useState, useEffect } from "react";
-import {  StyleSheet, Alert, Text, View, FlatList } from "react-native";
-import { Appbar, ActivityIndicator } from "react-native-paper";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { collection, doc, getDoc, addDoc, updateDoc } from "firebase/firestore";
+import CustomButton from "@/components/CustomButton";
+import CustomInput from "@/components/CustomInput";
+import { incomeFromGroupsList } from "@/components/LedgerGroupList"; // Import the array
 import { db } from "@/firebaseConfig";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { updateLedger } from "@/utils/updateLedger";
-import { GenerateVoucherNumber } from "@/utils/generateVoucherNumber";
-import { incomeFromGroupsList } from '@/components/LedgerGroupList'; // Import the array
-import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
 import { fetchAccountList } from "@/utils/acountFetcher";
-import CustomButton from '@/components/CustomButton';
-import CustomInput from '@/components/CustomInput';
+import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
 import Dropdown from "@/utils/DropDown";
+import { GenerateVoucherNumber } from "@/utils/generateVoucherNumber";
+import { useLedgerEffect } from "@/utils/getLedgerEffect";
 import PaymentDatePicker from "@/utils/paymentDate";
 import { useSociety } from "@/utils/SocietyContext";
+import { updateLedger } from "@/utils/updateLedger";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { addDoc, collection, doc, getDoc, updateDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import { Alert, FlatList, Text, View } from "react-native";
+import { ActivityIndicator, Appbar } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { globalStyles } from "@/styles/globalStyles";
 
 const IncomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -22,11 +24,17 @@ const IncomeScreen: React.FC = () => {
   const params = useLocalSearchParams();
   const isEditMode = !!params?.id;
   const { societyName } = useSociety();
-  const transactionCollectionName = `Transactions_${societyName}`;
+  // const transactionCollectionName = `Transactions_${societyName}`;
+
+  const { getLedgerEffect } = useLedgerEffect();
+  const bankCashCategories = ["Bank Accounts", "Cash in Hand"];
+
+  const invertEffect = (effect: "Add" | "Subtract"): "Add" | "Subtract" =>
+    effect === "Add" ? "Subtract" : "Add";
 
   const [paidFrom, setPaidFrom] = useState<string>("");
   const [paidTo, setPaidTo] = useState<string>("");
-  
+
   const [groupFrom, setGroupFrom] = useState<string>("");
   const [groupTo, setGroupTo] = useState<string>("");
 
@@ -37,9 +45,13 @@ const IncomeScreen: React.FC = () => {
 
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
-  
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
-  const [accountToOptions, setAccountToOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+
+  const [accountFromOptions, setAccountFromOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
+  const [accountToOptions, setAccountToOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
 
   // Function to format date as "YYYY-MM-DD"
   const formatDate = (date: Date) => {
@@ -56,37 +68,43 @@ const IncomeScreen: React.FC = () => {
     setFormattedDate(formatDate(newDate));
   };
 
-    // fetch Paid From List
-    useEffect(() => {
-      const fetchOptions = async () => {
-        try {
-          const { accountOptions } = await fetchAccountList(societyName, incomeFromGroupsList);
-          setAccountFromOptions(accountOptions);
-        } catch (error) {
-          Alert.alert("Error", "Failed to fetch account options.");
-        }
-      };
-      fetchOptions();
-    }, [incomeFromGroupsList, params?.id]);
+  // fetch Paid From List
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const { accountOptions } = await fetchAccountList(
+          societyName,
+          incomeFromGroupsList
+        );
+        setAccountFromOptions(accountOptions);
+      } catch (error) {
+        console.log("error", error);
+        Alert.alert("Error", "Failed to fetch account options.");
+      }
+    };
+    fetchOptions();
+  }, [params.id, societyName]);
 
   // fetch Paid To List
   useEffect(() => {
     const fetchbankCashOptions = async () => {
       try {
-        const { accountFromOptions } = await fetchbankCashAccountOptions(societyName);
+        const { accountFromOptions } =
+          await fetchbankCashAccountOptions(societyName);
         setAccountToOptions(accountFromOptions);
       } catch (error) {
+        console.log("error", error);
         Alert.alert("Error", "Failed to fetch bank Cash account options.");
       }
     };
     fetchbankCashOptions();
-  }, [params?.id]);
+  }, [params.id, societyName]);
 
   useEffect(() => {
     const fetchTransactionDetails = async () => {
       if (isEditMode && params?.id) {
         try {
-          const docRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
+          const docRef = doc(db, "Transactions", params.id as string);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -98,7 +116,9 @@ const IncomeScreen: React.FC = () => {
             setPaymentNote(data.paymentNote || "");
             setAsOnDate(new Date(data.transactionDate || new Date()));
             setFormattedDate(
-              data.transactionDate ? data.transactionDate : formatDate(new Date())
+              data.transactionDate
+                ? data.transactionDate
+                : formatDate(new Date())
             );
             setGroupFrom(data.groupFrom);
             setGroupTo(data.groupTo);
@@ -110,8 +130,7 @@ const IncomeScreen: React.FC = () => {
       }
     };
     fetchTransactionDetails();
-  }, [isEditMode, params?.id]);
-
+  }, [isEditMode, params.id, societyName]);
 
   const handleSave = async () => {
     if (!paidFrom || !paidTo || !amount) {
@@ -128,6 +147,7 @@ const IncomeScreen: React.FC = () => {
       }
 
       const transaction: {
+        societyName: string;
         paidFrom: string;
         paidTo: string;
         groupFrom: string;
@@ -142,6 +162,7 @@ const IncomeScreen: React.FC = () => {
         type: string;
         voucher?: string;
       } = {
+        societyName, // 🔥 required
         paidFrom,
         paidTo,
         groupFrom,
@@ -156,10 +177,15 @@ const IncomeScreen: React.FC = () => {
         type: "Income",
       };
 
+      // Apply new ledger updates
+      const isCreditForFrom = bankCashCategories.includes(groupFrom)
+        ? false
+        : true;
+      const isCreditForTo = bankCashCategories.includes(groupTo) ? true : false;
 
       if (isEditMode && params?.id) {
         // Update existing transaction
-        const transactionRef = doc(db, "Societies", societyName, transactionCollectionName, params.id as string);
+        const transactionRef = doc(db, "Transactions", params.id as string);
 
         const transactionDoc = await getDoc(transactionRef);
         if (!transactionDoc.exists()) {
@@ -167,7 +193,7 @@ const IncomeScreen: React.FC = () => {
           return;
         }
         const originalTransaction = transactionDoc.data();
-        const originalPaidFrom = originalTransaction.paidFrom
+        const originalPaidFrom = originalTransaction.paidFrom;
         const originalPaidTo = originalTransaction.paidTo;
         const originalGroupFrom = originalTransaction.groupFrom;
         const originalGroupTo = originalTransaction.groupTo;
@@ -178,35 +204,59 @@ const IncomeScreen: React.FC = () => {
         await updateDoc(transactionRef, transaction);
 
         // Revert original ledger updates
-          await updateLedger(
-            societyName,
-            originalGroupTo,
-            originalPaidTo,
-            originalAmount,
-            "Subtract",
-            originalTransactionDate
-          );
+        // Revert original ledger updates
+        const isCreditForFromRevert = bankCashCategories.includes(
+          originalGroupFrom
+        )
+          ? false
+          : true;
+        const isCreditForToRevert = bankCashCategories.includes(originalGroupTo)
+          ? true
+          : false;
 
-          await updateLedger(
-            societyName,
-            originalGroupFrom,
-            originalPaidFrom,
-            originalAmount,
-            "Subtract",
-            originalTransactionDate
-          );
-        
-        
-          // Apply new ledger updates
-          await updateLedger(societyName, groupTo, paidTo, parsedAmount, "Add",formattedDate);
-          await updateLedger(societyName, groupFrom, paidFrom, parsedAmount, "Add", formattedDate);
+        await updateLedger(
+          societyName,
+          originalGroupTo,
+          originalPaidTo,
+          originalAmount,
+          invertEffect(getLedgerEffect(originalGroupTo, isCreditForToRevert)), // Credit side revert,,
+          originalTransactionDate
+        );
 
+        await updateLedger(
+          societyName,
+          originalGroupFrom,
+          originalPaidFrom,
+          originalAmount,
+          invertEffect(
+            getLedgerEffect(originalGroupFrom, isCreditForFromRevert)
+          ), // Debit side revert
+          originalTransactionDate
+        );
 
+        // Apply new ledger updates
+        await updateLedger(
+          societyName,
+          groupTo,
+          paidTo,
+          parsedAmount,
+          getLedgerEffect(groupTo, isCreditForTo), // Credit side "Add",
+          formattedDate
+        );
+        await updateLedger(
+          societyName,
+          groupFrom,
+          paidFrom,
+          parsedAmount,
+          getLedgerEffect(groupFrom, isCreditForFrom), // Debit side "Subtract",
+          formattedDate
+        );
 
         Alert.alert("Success", "Transaction updated successfully!", [
           {
             text: "OK",
-            onPress: () => router.replace("/admin/Accounting/TransactionScreen"),
+            onPress: () =>
+              router.replace("/admin/Accounting/TransactionScreen"),
           },
         ]);
       } else {
@@ -214,22 +264,35 @@ const IncomeScreen: React.FC = () => {
         const voucher = await GenerateVoucherNumber(societyName);
         transaction.voucher = voucher;
 
-        await addDoc(collection(db, "Societies", societyName, transactionCollectionName), transaction);
+        await addDoc(collection(db, "Transactions"), transaction);
 
-        // Update ledger        
+        // Update ledger
         const updatePromises = [];
-        const LedgerUpdate1 = await updateLedger(societyName, groupFrom,paidFrom, parsedAmount, "Add", formattedDate ); // Update Ledger
-        const LedgerUpdate2 = await updateLedger(societyName,groupTo, paidTo, parsedAmount, "Add", formattedDate ); // Update Ledger
-        updatePromises.push(
-          LedgerUpdate1, LedgerUpdate2
-        );
+        const LedgerUpdate1 = await updateLedger(
+          societyName,
+          groupFrom,
+          paidFrom,
+          parsedAmount,
+          getLedgerEffect(groupFrom, isCreditForFrom), // Debit side "Subtract",
+          formattedDate
+        ); // Update Ledger
+        const LedgerUpdate2 = await updateLedger(
+          societyName,
+          groupTo,
+          paidTo,
+          parsedAmount,
+          getLedgerEffect(groupTo, isCreditForTo), // Credit side "Add",
+          formattedDate
+        ); // Update Ledger
+        updatePromises.push(LedgerUpdate1, LedgerUpdate2);
         // Wait for all updates to complete
         await Promise.all(updatePromises);
 
         Alert.alert("Success", "Transaction saved successfully!", [
           {
             text: "OK",
-            onPress: () => router.replace("/admin/Accounting/TransactionScreen"),
+            onPress: () =>
+              router.replace("/admin/Accounting/TransactionScreen"),
           },
         ]);
       }
@@ -243,143 +306,132 @@ const IncomeScreen: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={styles.loaderContainer}>
+      <View style={globalStyles.loaderContainer}>
         <ActivityIndicator size="large" />
       </View>
     );
   }
 
-
-  
-
   return (
-    <View style={styles.container}>
+    <View style={globalStyles.container}>
       {/* Top Appbar */}
-      <Appbar.Header style={styles.header}>
+      <Appbar.Header style={globalStyles.header}>
         <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="Income" titleStyle={styles.titleStyle} />
+        <Appbar.Content title="Income" titleStyle={globalStyles.titleStyle} />
       </Appbar.Header>
       <FlatList
-              data={[{}]} // Use a single-item list to render your UI
-              renderItem={() => (
-                <>
-                    <View style={styles.cardview}>
-      
-                      {/* Paid From */}
-                      <View style={styles.section}>
-                        <Text style={styles.label}>Paid From</Text>
-                        <Dropdown
-                          data={accountFromOptions.map((option) => ({
-                            label: option.label,
-                            value: option.value,
-                          }))}
-                          onChange={(selectedValue) => {
-                            setPaidFrom(selectedValue);
-        
-                            // Find the selected account to get its group
-                            const selectedOption = accountFromOptions.find(
-                              (option) => option.value === selectedValue
-                            );
-                            if (selectedOption) {
-                              setGroupFrom(selectedOption.group); // Set the group name
-                            }
-                          }}
-                          placeholder="Select Account"
-                          initialValue={paidFrom}
-                        />
-        
-                      </View>
-                       {/* Paid To */}
-                      <View style={styles.section}>
-                        <Text style={styles.label}>Paid To</Text>
-                        <Dropdown
-                          data={accountToOptions.map((option) => ({
-                            label: option.label,
-                            value: option.value,
-                          }))}
-                          onChange={(selectedValue) => {
-                            setPaidTo(selectedValue);
-        
-                            // Find the selected account to get its group
-                            const selectedOption = accountToOptions.find(
-                              (option) => option.value === selectedValue
-                            );
-                            if (selectedOption) {
-                              setGroupTo(selectedOption.group); // Set the group name
-                            }
-                          }}
-                          placeholder="Select Account"
-                          initialValue={paidTo}
-                        />
-                      </View>
+        data={[{}]} // Use a single-item list to render your UI
+        renderItem={() => (
+          <>
+            <View style={globalStyles.cardview}>
+              {/* Paid From */}
+              <View style={globalStyles.section}>
+                <Text style={globalStyles.label}>Paid From</Text>
+                <Dropdown
+                  data={accountFromOptions.map((option) => ({
+                    label: option.label,
+                    value: option.value,
+                  }))}
+                  onChange={(selectedValue) => {
+                    setPaidFrom(selectedValue);
 
-        
-                      {/* Narration */}
-                      <View style={{ width: '100%' }}>
-                              <CustomInput
-                                label="Narration"
-                                value={narration}
-                                onChangeText={setNarration}
-                                multiline = {true}
-                              />
-                            </View>
-                    </View>
-
-                    <View style={styles.cardview}>
-
-                      {/* Amount */}
-                      <View style={{ width: '100%' }}>
-                              <CustomInput
-                                label="Amount"
-                                value={amount}
-                                onChangeText={setAmount}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                      {/* Note */}
-                      <View style={{ width: '100%' }}>
-                              <CustomInput
-                                label="Payment Note"
-                                value={paymentNote}
-                                onChangeText={setPaymentNote}
-                                multiline = {true}
-                              />
-                            </View>
-                      {/* Transaction Date */}
-                      <View style={styles.section}>
-                              <Text style={styles.label}>Transaction Date</Text>
-                              <PaymentDatePicker
-                                initialDate={asOnDate}
-                                onDateChange={handleDateChange}
-                              />
-                            </View>
-                    
-                    </View>
-                    </>
-                  )}
-                  keyExtractor={(item, index) => index.toString()}
-                  contentContainerStyle={[
-    styles.scrollContainer,
-    { paddingBottom: insets.bottom + 100 }, // 👈 extra space for footer + FAB
-  ]}
+                    // Find the selected account to get its group
+                    const selectedOption = accountFromOptions.find(
+                      (option) => option.value === selectedValue
+                    );
+                    if (selectedOption) {
+                      setGroupFrom(selectedOption.group); // Set the group name
+                    }
+                  }}
+                  placeholder="Select Account"
+                  initialValue={paidFrom}
                 />
-
-                {/* Save Button */}
-                <View
-        style={[
-          styles.footer,
-          { bottom: insets.bottom },
-        ]}
-      >
-              <CustomButton
-                onPress={handleSave}
-                title= {isEditMode ? "Update" : "Save"}
-              />
               </View>
+              {/* Paid To */}
+              <View style={globalStyles.section}>
+                <Text style={globalStyles.label}>Paid To</Text>
+                <Dropdown
+                  data={accountToOptions.map((option) => ({
+                    label: option.label,
+                    value: option.value,
+                  }))}
+                  onChange={(selectedValue) => {
+                    setPaidTo(selectedValue);
+
+                    // Find the selected account to get its group
+                    const selectedOption = accountToOptions.find(
+                      (option) => option.value === selectedValue
+                    );
+                    if (selectedOption) {
+                      setGroupTo(selectedOption.group); // Set the group name
+                    }
+                  }}
+                  placeholder="Select Account"
+                  initialValue={paidTo}
+                />
+              </View>
+
+              {/* Narration */}
+              <View style={{ width: "100%" }}>
+                <CustomInput
+                  label="Narration"
+                  value={narration}
+                  onChangeText={setNarration}
+                  multiline={true}
+                />
+              </View>
+            </View>
+
+            <View style={globalStyles.cardview}>
+              {/* Amount */}
+              <View style={{ width: "100%" }}>
+                <CustomInput
+                  label="Amount"
+                  value={amount}
+                  onChangeText={setAmount}
+                  keyboardType="numeric"
+                />
+              </View>
+              {/* Note */}
+              <View style={{ width: "100%" }}>
+                <CustomInput
+                  label="Payment Note"
+                  value={paymentNote}
+                  onChangeText={setPaymentNote}
+                  multiline={true}
+                />
+              </View>
+              {/* Transaction Date */}
+              <View style={globalStyles.section}>
+                <Text style={globalStyles.label}>Transaction Date</Text>
+                <PaymentDatePicker
+                  initialDate={asOnDate}
+                  onDateChange={handleDateChange}
+                />
+              </View>
+            </View>
+          </>
+        )}
+        keyExtractor={(item, index) => index.toString()}
+        contentContainerStyle={[
+          globalStyles.scrollContainer,
+          { paddingBottom: insets.bottom + 100 }, // 👈 extra space for footer + FAB
+        ]}
+      />
+
+      {/* Save Button */}
+      <View style={[globalStyles.footer, { bottom: insets.bottom }]}>
+        <CustomButton
+          onPress={handleSave}
+          title={isEditMode ? "Update" : "Save"}
+        />
+      </View>
     </View>
   );
 };
 
+{
+  /** 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -390,7 +442,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   section: { marginBottom: 10 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
   cardview: {
@@ -410,15 +462,18 @@ const styles = StyleSheet.create({
   header: { backgroundColor: "#6200ee" },
   titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   footer: {
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,   // 👈 ensures it's always visible at bottom
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0, // 👈 ensures it's always visible at bottom
     backgroundColor: "#fff",
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#ddd",
   },
 });
+
+*/
+}
 
 export default IncomeScreen;

@@ -1,32 +1,32 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ActivityIndicator, Alert, FlatList, TouchableOpacity, TextInput } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+} from "react-native";
 
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AppbarComponent from '@/components/AppbarComponent'; // Adjust the path as per your structure
+import AppbarComponent from "@/components/AppbarComponent"; // Adjust the path as per your structure
 
-import DropdownMultiSelect from "@/utils/DropdownMultiSelect"
+import DropdownMultiSelect from "@/utils/DropdownMultiSelect";
 
-import CustomInput from '@/components/CustomInput';
+import CustomInput from "@/components/CustomInput";
 import Dropdown from "@/utils/DropDown";
 import PaymentDatePicker from "@/utils/paymentDate";
-import { MaterialIcons } from '@expo/vector-icons'; // Or use another icon library if needed
+import { MaterialIcons } from "@expo/vector-icons"; // Or use another icon library if needed
 
-import { useSociety } from "@/utils/SocietyContext"; 
-import {fetchMembersUpdated} from "@/utils/fetchMembersUpdated";
+import { useSociety } from "@/utils/SocietyContext";
+import { fetchMembersUpdated } from "@/utils/fetchMembersUpdated";
 
-import { billItemLedgerGroupList } from '@/components/LedgerGroupList'; // Import the array
+import { billItemLedgerGroupList } from "@/components/LedgerGroupList"; // Import the array
 import { fetchAccountList } from "@/utils/acountFetcher";
-  
-import {
-  Button,
-  Switch,
-  Text,
-  Divider,
-  IconButton,
-} from 'react-native-paper';
 
-
+import { Button, Switch, Text, Divider, IconButton } from "react-native-paper";
 
 // Define TypeScript type for a bill item
 interface BillItem {
@@ -54,21 +54,19 @@ const CreateSpecialBill = () => {
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [balancesheet, setBalancesheet] = useState("");
-  const [isAdvancePaymentSettelement, setisAdvancePaymentSettelement] = useState(false);
-
-  
+  const [isAdvancePaymentSettelement, setisAdvancePaymentSettelement] =
+    useState(false);
 
   const balancesheets = ["Main Balance"];
   const occuranceArray = ["One Time", "Recurring"];
   const penaltyTypeArray = ["Fixed Price", "Percentage"];
 
-  const [startDate, setStartDate] = useState<Date>(new Date());
-  const [endDate, setEndDate] = useState<Date>(new Date());
+  const [startDate, setStartDate] = useState<Date>();
+  const [endDate, setEndDate] = useState<Date>();
   const [invoiceDate, setInvoiceDate] = useState<Date>(new Date());
-  const [dueDate, setDueDate] = useState<Date>(new Date());
+  const [dueDate, setDueDate] = useState<Date>();
 
   const [loading, setLoading] = useState(true);
-
 
   const [isEnablePenalty, setIsEnablePenalty] = useState(false);
   const [Occurance, setOccurance] = useState("");
@@ -76,18 +74,19 @@ const CreateSpecialBill = () => {
   const [penaltyType, setPenaltyType] = useState("");
   const [fixPricePenalty, setfixPricePenalty] = useState("");
   const [percentPenalty, setPercentPenalty] = useState("");
-  
-
 
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  // const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
 
-  const [accountFromOptions, setAccountFromOptions] = useState<{ label: string; value: string; group: string }[]>([]);
+  const [accountFromOptions, setAccountFromOptions] = useState<
+    { label: string; value: string; group: string }[]
+  >([]);
 
   const [ledgerAccountPenalty, setLedgerAccountPenalty] = useState<string>("");
-  const [ledgerAccountGroupPenalty, setLedgerAccountGroupPenalty] = useState<string>("");
+  const [ledgerAccountGroupPenalty, setLedgerAccountGroupPenalty] =
+    useState<string>("");
 
   const [fetchedmembers, setFetchedMembers] = useState<Member[]>([]);
 
@@ -95,23 +94,24 @@ const CreateSpecialBill = () => {
     { floor: string; label: string; value: string }[]
   >([]);
 
-
   // fetch Paid From List
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const { accountOptions } = await fetchAccountList(societyName, billItemLedgerGroupList);
+        const { accountOptions } = await fetchAccountList(
+          societyName,
+          billItemLedgerGroupList
+        );
         setAccountFromOptions(accountOptions);
       } catch (error) {
         if (error) {
-        Alert.alert(error as string, "Failed to fetch account options.");
+          Alert.alert(error as string, "Failed to fetch account options.");
         }
       }
     };
     fetchOptions();
   }, [societyName]);
-  
- 
+
   useEffect(() => {
     const loadMembers = async () => {
       try {
@@ -128,20 +128,27 @@ const CreateSpecialBill = () => {
     loadMembers();
   }, [societyName]);
 
-  
-  const [formattedMembersData, setFormattedMembersData] = useState<string[]>([]);
+  const [formattedMembersData, setFormattedMembersData] = useState<string[]>(
+    []
+  );
 
-  useEffect(()=>{
-    console.log("formattedMembersData", formattedMembersData)
-  },[formattedMembersData])
+  useEffect(() => {
+    if (formattedMembersData.length > 0) {
+      console.log("formattedMembersData", formattedMembersData);
+    }
+  }, [formattedMembersData]);
 
   useEffect(() => {
     // Format the data as desired
     // const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
-    const newData = selectedfetchedMembers.map(
-      (item) => `${item.floor}-${item.label.split(" ").join("-")}`
-    );
-    setFormattedMembersData(newData);
+    const newData = selectedfetchedMembers.map((item) => {
+      const [wing, flatAndUserId] = item.value.split(" ");
+      const flatNumber = flatAndUserId.split("-")[0]; // extract only the flat number part (before userId)
+      return `${item.floor}-${wing}-${flatNumber}`;
+    });
+    // ✅ Remove duplicates using Set
+    const uniqueData = Array.from(new Set(newData));
+    setFormattedMembersData(uniqueData);
   }, [selectedfetchedMembers]);
 
   const handleDateChange = (newDate: Date, type: string) => {
@@ -158,23 +165,22 @@ const CreateSpecialBill = () => {
 
   // Fetch Bill Items from Firestore
   useEffect(() => {
-    if (params?.id) {
-        setIsEditMode(true)};
-        const fetchBillItems = async () => {
-            try {
-              const storedItem = await AsyncStorage.getItem("@createdBillItem");
-              if (storedItem) {
-                const parsedItems: BillItem[] = JSON.parse(storedItem);
-                const uniqueItems = parsedItems.filter(
-                  (newItem) => !billItems.some((existingItem) => existingItem.id === newItem.id)
-                );
-                setBillItems((prevItems) => [...prevItems, ...uniqueItems]);
-              }
-            } catch (error) {
-              console.error("Error fetching bill items:", error);
-              Alert.alert("Error", "Failed to load bill items.");
-            }
-          };
+    const fetchBillItems = async () => {
+      try {
+        const storedItem = await AsyncStorage.getItem("@createdBillItem");
+        if (storedItem) {
+          const parsedItems: BillItem[] = JSON.parse(storedItem);
+          const uniqueItems = parsedItems.filter(
+            (newItem) =>
+              !billItems.some((existingItem) => existingItem.id === newItem.id)
+          );
+          setBillItems((prevItems) => [...prevItems, ...uniqueItems]);
+        }
+      } catch (error) {
+        console.error("Error fetching bill items:", error);
+        Alert.alert("Error", "Failed to load bill items.");
+      }
+    };
 
     fetchBillItems();
   }, [params?.id]);
@@ -188,7 +194,64 @@ const CreateSpecialBill = () => {
       Alert.alert("Error", "Failed to save bill items.");
     }
   };
- 
+
+  // Save Filled Form Data before going to Add Bill Item
+  const saveFormData = async () => {
+    const formData = {
+      name,
+      note,
+      balancesheet,
+      isAdvancePaymentSettelement,
+      startDate,
+      endDate,
+      invoiceDate,
+      dueDate,
+      Occurance,
+      recurringFrequency,
+      penaltyType,
+      fixPricePenalty,
+      percentPenalty,
+      ledgerAccountPenalty,
+      ledgerAccountGroupPenalty,
+      isEnablePenalty,
+      selectedfetchedMembers,
+    };
+    await AsyncStorage.setItem("@specialBillForm", JSON.stringify(formData));
+  };
+  // restore Filled Form Data the data on mount using useEffect
+  useEffect(() => {
+    const loadFormData = async () => {
+      const saved = await AsyncStorage.getItem("@specialBillForm");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setName(parsed.name || "");
+        setNote(parsed.note || "");
+        setBalancesheet(parsed.balancesheet || "");
+        setisAdvancePaymentSettelement(
+          parsed.isAdvancePaymentSettelement || false
+        );
+        setStartDate(
+          parsed.startDate ? new Date(parsed.startDate) : new Date()
+        );
+        setEndDate(parsed.endDate ? new Date(parsed.endDate) : new Date());
+        setInvoiceDate(
+          parsed.invoiceDate ? new Date(parsed.invoiceDate) : new Date()
+        );
+        setDueDate(parsed.dueDate ? new Date(parsed.dueDate) : new Date());
+        setOccurance(parsed.Occurance || "");
+        setRecurringFrequency(parsed.recurringFrequency || "");
+        setPenaltyType(parsed.penaltyType || "");
+        setfixPricePenalty(parsed.fixPricePenalty || "");
+        setPercentPenalty(parsed.percentPenalty || "");
+        setLedgerAccountPenalty(parsed.ledgerAccountPenalty || "");
+        setLedgerAccountGroupPenalty(parsed.ledgerAccountGroupPenalty || "");
+        setIsEnablePenalty(parsed.isEnablePenalty || false);
+        setSelectedFetchedMembers(parsed.selectedfetchedMembers || []);
+      }
+    };
+    loadFormData();
+  }, []);
+
   // Handle Edit Action
   const handleEdit = (item: BillItem) => {
     router.push({
@@ -196,82 +259,107 @@ const CreateSpecialBill = () => {
       params: { itemId: item.id }, // Pass item ID for editing
     });
   };
-  
+
   // Handle Delete Action
   const handleDelete = (id: string) => {
-    Alert.alert("Confirm Delete", "Are you sure you want to delete this item?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          const updatedItems = billItems.filter((item) => item.id !== id);
-          setBillItems(updatedItems);
-          await saveBillItems(updatedItems);
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this item?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]);
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const updatedItems = billItems.filter((item) => item.id !== id);
+            setBillItems(updatedItems);
+            await saveBillItems(updatedItems);
+          },
+        },
+      ]
+    );
   };
 
   const navigateToNextScreen = () => {
     // Validation logic
-      if (!name.trim()) {
-        Alert.alert("Validation Error", "Please enter a Name.");
-        return;
-      }
-      if (!startDate) {
-        Alert.alert("Validation Error", "Please select a Start Date.");
-        return;
-      }
-      if (!endDate) {
-        Alert.alert("Validation Error", "Please select a endDate.");
-        return;
-      }
-      if (!dueDate) {
-        Alert.alert("Validation Error", "Please select a dueDate.");
-        return;
-      }
-      if (selectedfetchedMembers.length === 0) {
-        Alert.alert("Validation Error", "Please select at least one Member.");
-        return;
-        }
-      if (billItems.length === 0) {
-        Alert.alert("Validation Error", "Please add at least one Bill Item.");
-        return;
-      }
+    if (!name.trim()) {
+      Alert.alert("Validation Error", "Please enter a Name.");
+      return;
+    }
+    if (!startDate) {
+      Alert.alert("Validation Error", "Please select a Start Date.");
+      return;
+    }
+    if (!endDate) {
+      Alert.alert("Validation Error", "Please select a endDate.");
+      return;
+    }
+    if (!dueDate) {
+      Alert.alert("Validation Error", "Please select a dueDate.");
+      return;
+    }
+    if (selectedfetchedMembers.length === 0) {
+      Alert.alert("Validation Error", "Please select at least one Member.");
+      return;
+    }
+    if (billItems.length === 0) {
+      Alert.alert("Validation Error", "Please add at least one Bill Item.");
+      return;
+    }
 
-      // Construct parameters for navigation
-      const params = {
-        name,
-        note,
-        balancesheet,
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0],
-        dueDate: dueDate.toISOString().split("T")[0],
-        invoiceDate: invoiceDate.toISOString().split("T")[0],
-        members:formattedMembersData.join(", "),
-        items: JSON.stringify(billItems),
-        isEnablePenalty: isEnablePenalty ? "true" : "false", // Convert boolean to string,
-        Occurance,
-        recurringFrequency,
-        penaltyType,
-        fixPricePenalty,
-        percentPenalty,
-        ledgerAccountPenalty,
-        ledgerAccountGroupPenalty,
-      };
-      
-      // Navigate to the next screen
-      router.push({
-        pathname: "./NextScreenSpecial",
-        params,
-      });
+    const ownerBillAmount = billItems.reduce(
+      (sum, item) => sum + (item.ownerAmount || 0),
+      0
+    );
 
-      };
+    const rentBillAmount = billItems.reduce(
+      (sum, item) => sum + (item.rentAmount || 0),
+      0
+    );
 
+    const closedBillAmount = billItems.reduce(
+      (sum, item) => sum + (item.closedUnitAmount || 0),
+      0
+    );
+
+    console.log("ownerBillAmount", ownerBillAmount);
+    console.log("rentBillAmount", rentBillAmount);
+    console.log("closedBillAmount", closedBillAmount);
+
+    // Construct parameters for navigation
+    const params = {
+      name,
+      note,
+      balancesheet,
+      startDate: startDate.toISOString().split("T")[0],
+      endDate: endDate.toISOString().split("T")[0],
+      dueDate: dueDate.toISOString().split("T")[0],
+      invoiceDate: invoiceDate.toISOString().split("T")[0],
+      members: formattedMembersData.join(", "),
+      items: JSON.stringify(billItems),
+      isEnablePenalty: isEnablePenalty ? "true" : "false", // Convert boolean to string,
+      Occurance,
+      recurringFrequency,
+      penaltyType,
+      fixPricePenalty,
+      percentPenalty,
+      ledgerAccountPenalty,
+      ledgerAccountGroupPenalty,
+      ownerBillAmount,
+      rentBillAmount,
+      closedBillAmount,
+    };
+    console.log("invoiceDate Create bill", invoiceDate);
+
+    // Navigate to the next screen
+    router.push({
+      pathname: "./NextScreenSpecial",
+      params,
+    });
+  };
 
   if (loading) {
     return (
@@ -283,68 +371,57 @@ const CreateSpecialBill = () => {
 
   return (
     <View style={styles.container}>
-
-    {/* Top Appbar */}
-    <AppbarComponent
-        title="Create Special Bill"
-        source="Admin"
-      />
+      {/* Top Appbar */}
+      <AppbarComponent title="Create Special Bill" source="Admin" />
 
       <FlatList
-              data={[{}]} // Use a single-item list to render your UI
-              renderItem={() => (
-                <>
-                
-                
-      {/* Bill Details Section */}
-      <View style={styles.cardview}>
-        <Text style={styles.sectionHeader}>Bill Details</Text>
-        <Divider style={styles.divider} />
-        {/* Custom Voucher No */}
-        <View style={{ width: '100%' }}>
-          <CustomInput
-            label="Name"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
+        data={[{}]} // Use a single-item list to render your UI
+        renderItem={() => (
+          <>
+            {/* Bill Details Section */}
+            <View style={styles.cardview}>
+              <Text style={styles.sectionHeader}>Bill Details</Text>
+              <Divider style={styles.divider} />
+              {/* Custom Voucher No */}
+              <View style={{ width: "100%" }}>
+                <CustomInput label="Name" value={name} onChangeText={setName} />
+              </View>
 
-        {/* Notes */}
-        <View style={{ width: '100%' }}>
-          <CustomInput
-            label="Notes (optional)"
-            value={note}
-            onChangeText={setNote}
-            multiline = {true}
-          />
-        </View>
+              {/* Notes */}
+              <View style={{ width: "100%" }}>
+                <CustomInput
+                  label="Notes (optional)"
+                  value={note}
+                  onChangeText={setNote}
+                  multiline={true}
+                />
+              </View>
 
-        {/* Dropdown for Balancesheet */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Balancesheet</Text>
-          <Dropdown
-            data={balancesheets.map((option) => ({
-              label: option,
-              value: option,
-            }))}
-            onChange={(selectedValue) => {
-              setBalancesheet(selectedValue);
-            }}
-            placeholder="Select "
-            initialValue={balancesheet}
-          />
-        </View>
-        
-      </View>
+              {/* Dropdown for Balancesheet */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Balancesheet</Text>
+                <Dropdown
+                  data={balancesheets.map((option) => ({
+                    label: option,
+                    value: option,
+                  }))}
+                  onChange={(selectedValue) => {
+                    setBalancesheet(selectedValue);
+                  }}
+                  placeholder="Select "
+                  initialValue={balancesheet}
+                />
+              </View>
+            </View>
 
-      {/* Bill Duration Section */}
-      <View style={styles.cardview}>
-        <Text style={styles.sectionHeader}>Bill Duration</Text>
-        <Divider style={styles.divider} />
+            {/* Bill Duration Section */}
+            <View style={styles.cardview}>
+              <Text style={styles.sectionHeader}>Bill Duration</Text>
+              <Divider style={styles.divider} />
 
-        {/* Date Pickers */}
-        {/* From Date */}
-        <View style={styles.section}>
+              {/* Date Pickers */}
+              {/* From Date */}
+              <View style={styles.section}>
                 <Text style={styles.label}>From Date</Text>
                 <PaymentDatePicker
                   initialDate={startDate}
@@ -353,266 +430,297 @@ const CreateSpecialBill = () => {
               </View>
 
               {/* To Date */}
-        <View style={styles.section}>
-          <Text style={styles.label}>To Date</Text>
-          <PaymentDatePicker
-            initialDate={endDate}
-            onDateChange={(newDate) => handleDateChange(newDate, "end")}
-          />
-        </View>
-            {/* Due Date */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Due Date</Text>
-          <PaymentDatePicker
-            initialDate={dueDate}
-            onDateChange={(newDate) => handleDateChange(newDate, "due")}
-          />
-        </View>
-            {/* Invoice Date */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Invoice Date</Text>
-          <PaymentDatePicker
-            initialDate={invoiceDate}
-            onDateChange={(newDate) => handleDateChange(newDate, "Invoice")}
-          />
-        </View>
-        
-            {/* Select Members */}
-        <View style={styles.section}>
-        <Text style={styles.label}>Members</Text>
-          <DropdownMultiSelect
-  options={fetchedmembers}
-  selectedValues={selectedfetchedMembers.map((m) => m.value)}
-  onChange={(values) => {
-    const selected = fetchedmembers.filter((m) => values.includes(m.value));
-    setSelectedFetchedMembers(selected);
-  }}
-  placeholder="Select members"
-/>
-
-        </View>
-
-      </View>
-
-      {/* Added Items to bill */}
-
-      {isEditMode && (
-        <View style={styles.cardview}>
-          <Text style={styles.sectionHeader}>Bill Items</Text>
-          <FlatList
-            data={billItems}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false} // Disable scrolling
-            renderItem={({ item }) => (
-              <View style={styles.listItem}>
-                <View style={styles.listItemContent}>
-                <Text style={styles.listItemText}>Item Name: {item.itemName}</Text>
-                {item.notes && <Text style={styles.listItemText}>Notes: {item.notes}</Text>}
-                {item.type && <Text style={styles.listItemText}>Type: {item.type}</Text>}
-                {item.ownerAmount && <Text style={styles.listItemText}>Owner Amount: {item.ownerAmount}</Text>}
-                {item.rentAmount && <Text style={styles.listItemText}>Rent Amount: {item.rentAmount}</Text>}
-                {item.closedUnitAmount && <Text style={styles.listItemText}>Closed Unit Amount: {item.closedUnitAmount}</Text>}
-                {item.updatedLedgerAccount && <Text style={styles.listItemText}>updated Ledger Account: {item.updatedLedgerAccount}</Text>}
-                {item.groupFrom && <Text style={styles.listItemText}>groupFrom: {item.groupFrom}</Text>}
-          
-          </View>
-          <View style={styles.listItemActions}>
-                {/* Edit Button */}
-                <IconButton
-                  icon="pencil"
-                  size={20}
-                  onPress={() => handleEdit(item)}
-                  style={styles.actionButton}
-                />
-                {/* Delete Button */}
-                <IconButton
-                  icon="delete"
-                  size={20}
-                  onPress={() => handleDelete(item.id)}
-                  style={styles.actionButton}
+              <View style={styles.section}>
+                <Text style={styles.label}>To Date</Text>
+                <PaymentDatePicker
+                  initialDate={endDate}
+                  onDateChange={(newDate) => handleDateChange(newDate, "end")}
+                  minimumDate={startDate}
                 />
               </View>
-        </View>
+              {/* Due Date */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Due Date</Text>
+                <PaymentDatePicker
+                  initialDate={dueDate}
+                  onDateChange={(newDate) => handleDateChange(newDate, "due")}
+                  minimumDate={startDate}
+                />
+              </View>
+              {/* Invoice Date */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Invoice Date</Text>
+                <PaymentDatePicker
+                  initialDate={invoiceDate}
+                  onDateChange={(newDate) =>
+                    handleDateChange(newDate, "invoice")
+                  }
+                />
+              </View>
+
+              {/* Select Members */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Members</Text>
+                <DropdownMultiSelect
+                  options={fetchedmembers}
+                  selectedValues={selectedfetchedMembers.map((m) => m.value)}
+                  onChange={(values) => {
+                    const selected = fetchedmembers.filter((m) =>
+                      values.includes(m.value)
+                    );
+                    setSelectedFetchedMembers(selected);
+                  }}
+                  placeholder="Select members"
+                />
+              </View>
+            </View>
+
+            {/* Added Items to bill */}
+            {billItems.length > 0 && (
+              <View style={styles.cardview}>
+                <Text style={styles.sectionHeader}>Bill Items</Text>
+                <FlatList
+                  data={billItems}
+                  contentContainerStyle={{ paddingBottom: 100 }}
+                  keyExtractor={(item) => item.id}
+                  scrollEnabled={false} // Disable scrolling
+                  renderItem={({ item }) => (
+                    <View style={styles.listItem}>
+                      <View style={styles.listItemContent}>
+                        <Text style={styles.listItemText}>
+                          Item Name: {item.itemName}
+                        </Text>
+                        {item.notes && (
+                          <Text style={styles.listItemText}>
+                            Notes: {item.notes}
+                          </Text>
+                        )}
+                        {item.type && (
+                          <Text style={styles.listItemText}>
+                            Type: {item.type}
+                          </Text>
+                        )}
+                        {item.ownerAmount && (
+                          <Text style={styles.listItemText}>
+                            Owner Amount: {item.ownerAmount}
+                          </Text>
+                        )}
+                        {item.rentAmount && (
+                          <Text style={styles.listItemText}>
+                            Rent Amount: {item.rentAmount}
+                          </Text>
+                        )}
+                        {item.closedUnitAmount && (
+                          <Text style={styles.listItemText}>
+                            Closed Unit Amount: {item.closedUnitAmount}
+                          </Text>
+                        )}
+                        {item.ledgerAccount && (
+                          <Text style={styles.listItemText}>
+                            updated Ledger Account: {item.ledgerAccount}
+                          </Text>
+                        )}
+                        {item.updatedLedgerAccount && (
+                          <Text style={styles.listItemText}>
+                            Ledger Account: {item.updatedLedgerAccount}
+                          </Text>
+                        )}
+                        {item.groupFrom && (
+                          <Text style={styles.listItemText}>
+                            groupFrom: {item.groupFrom}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.listItemActions}>
+                        {/* Edit Button */}
+                        <IconButton
+                          icon="pencil"
+                          size={20}
+                          onPress={() => handleEdit(item)}
+                          style={styles.actionButton}
+                        />
+                        {/* Delete Button */}
+                        <IconButton
+                          icon="delete"
+                          size={20}
+                          onPress={() => handleDelete(item.id)}
+                          style={styles.actionButton}
+                        />
+                      </View>
+                    </View>
+                  )}
+                  ListEmptyComponent={<Text>No items available</Text>}
+                />
+              </View>
             )}
-            ListEmptyComponent={<Text>No items available</Text>}
-          />
-        </View>
-      )}
 
-      {/* Buttons */}
+            {/* Buttons */}
 
-    <TouchableOpacity
-     onPress={() => {
-      if (!balancesheet) {
-        Alert.alert('Generate Bill', 'Select Balancesheet');
-      } else {
-        // Navigate to the Items Page and pass balancesheet as a parameter
-        router.push({
-          pathname: '/admin/Bills/SpecialBills/specialBillitems', // Adjust this path based on your routing structure  specialBillitems
-          params: { balancesheet }, // Pass the balancesheet value
-        });
-      }
-    }}
-     style={styles.addButtonNew}>
-      <View style={styles.buttonContent}>
-        <MaterialIcons name="add-circle-outline" size={24} color="#000" />
-        <Text style={styles.addButtonText}>Add Bill Item</Text>
-      </View>
-    </TouchableOpacity>
-
-
-    
-
-    {/* switch - for Advance Payment Settelment */}
-      <View style={styles.cardview}>
-        <View style={styles.switchContainer}>
-              <Text style={styles.label}>Advance Payment Settelement?</Text>
-              <Switch
-                value={isAdvancePaymentSettelement}
-                onValueChange={() => setisAdvancePaymentSettelement(!isAdvancePaymentSettelement)}
-                color="#4CAF50"
-              />
-          </View>
-      </View>
-
-      {/* switch - for Penalty */}
-
-    <View style={styles.cardview}>
-      <View style={styles.switchContainer}>
-          <Text style={styles.label}>Enable Penalty</Text>
-          <Switch
-            value={isEnablePenalty}
-            onValueChange={() => setIsEnablePenalty(!isEnablePenalty)}
-            color="#4CAF50"
-          />
-    </View>
-
-      { isEnablePenalty && (
-        <>
-          <View style={styles.section}>
-            <Text style={styles.label}>Select Occurance</Text>
-            <Dropdown
-              data={occuranceArray.map((option) => ({
-                label: option,
-                value: option,
-              }))}
-              onChange={(selectedValue) => {
-                setOccurance(selectedValue);
-              }}
-              placeholder="Select "
-              initialValue={Occurance}
-            />
-          </View>
-
-          {Occurance === "Recurring" && (
-            <View style={styles.section}> 
-              <Text style={styles.label}>Day(s)</Text>
-              <TextInput
-               style={styles.penaltyTextInput}
-               placeholder="0"
-               value={recurringFrequency} 
-               onChangeText={setRecurringFrequency}
-               keyboardType={"numeric"}
-              />
-              <Text style={styles.recurringText}>set how many days after penalty calculate again</Text>
-            </View>
-          )}
-
-
-          <View style={styles.section}> 
-            <Text style={styles.label}>Penalty Type</Text>
-            <Dropdown
-              data={penaltyTypeArray.map((option) => ({
-                label: option,
-                value: option,
-              }))}
-              onChange={(selectedValue) => {
-                setPenaltyType(selectedValue);
-              }}
-              placeholder="Select "
-              initialValue={penaltyType}
-            />
-          </View>
-          {penaltyType === "Fixed Price" && (
-            <View style={styles.section}> 
-              <Text style={styles.label}>Fixed Price</Text>
-              <TextInput
-               style={styles.penaltyTextInput}
-               placeholder="0.00"
-               value={fixPricePenalty}
-               onChangeText={setfixPricePenalty}
-               keyboardType={"numeric"}
-              />
-            </View>
-          )}
-          {penaltyType === "Percentage" && (
-            <View style={styles.section}> 
-              <Text style={styles.label}>Percentage (%)</Text>
-              <TextInput
-               style={styles.penaltyTextInput}
-               placeholder="0.00"
-               value={percentPenalty}
-               onChangeText={setPercentPenalty}
-               keyboardType={"numeric"}
-              />
-            </View>
-          )}
-
-          {/* Penalty Ledger Account */}
-          <View style={styles.section}>
-            <Text style={styles.label}>Ledger Account</Text>
-            <Dropdown
-              data={accountFromOptions.map((option) => ({
-                label: option.label,
-                value: option.value,
-              }))}
-              onChange={(selectedValue) => {
-                setLedgerAccountPenalty(selectedValue);
-
-                // Find the selected account to get its group
-                const selectedOption = accountFromOptions.find(
-                  (option) => option.value === selectedValue
-                );
-                if (selectedOption) {
-                  setLedgerAccountGroupPenalty(selectedOption.group); // Set the group name
+            <TouchableOpacity
+              onPress={async () => {
+                if (!balancesheet) {
+                  Alert.alert("Generate Bill", "Select Balancesheet");
+                } else {
+                  await saveFormData(); // 🟢 Save before navigating
+                  // Navigate to the Items Page and pass balancesheet as a parameter
+                  router.push({
+                    pathname: "/admin/Bills/SpecialBills/specialBillitems", // Adjust this path based on your routing structure  specialBillitems
+                    params: { balancesheet }, // Pass the balancesheet value
+                  });
                 }
               }}
-              placeholder="Select Account"
-              initialValue={ledgerAccountPenalty}
-            />
+              style={styles.addButtonNew}
+            >
+              <View style={styles.buttonContent}>
+                <MaterialIcons
+                  name="add-circle-outline"
+                  size={24}
+                  color="#000"
+                />
+                <Text style={styles.addButtonText}>Add Bill Item</Text>
+              </View>
+            </TouchableOpacity>
 
-          </View>
+            {/* switch - for Advance Payment Settelment */}
+            <View style={styles.cardview}>
+              <View style={styles.switchContainer}>
+                <Text style={styles.label}>Advance Payment Settelement?</Text>
+                <Switch
+                  value={isAdvancePaymentSettelement}
+                  onValueChange={() =>
+                    setisAdvancePaymentSettelement(!isAdvancePaymentSettelement)
+                  }
+                  color="#4CAF50"
+                />
+              </View>
+            </View>
 
-       </>
-      )}
+            {/* switch - for Penalty */}
+
+            <View style={styles.cardview}>
+              <View style={styles.switchContainer}>
+                <Text style={styles.label}>Enable Penalty</Text>
+                <Switch
+                  value={isEnablePenalty}
+                  onValueChange={() => setIsEnablePenalty(!isEnablePenalty)}
+                  color="#4CAF50"
+                />
+              </View>
+
+              {isEnablePenalty && (
+                <>
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Select Occurance</Text>
+                    <Dropdown
+                      data={occuranceArray.map((option) => ({
+                        label: option,
+                        value: option,
+                      }))}
+                      onChange={(selectedValue) => {
+                        setOccurance(selectedValue);
+                      }}
+                      placeholder="Select "
+                      initialValue={Occurance}
+                    />
+                  </View>
+
+                  {Occurance === "Recurring" && (
+                    <View style={styles.section}>
+                      <Text style={styles.label}>Day(s)</Text>
+                      <TextInput
+                        style={styles.penaltyTextInput}
+                        placeholder="0"
+                        value={recurringFrequency}
+                        onChangeText={setRecurringFrequency}
+                        keyboardType={"numeric"}
+                      />
+                      <Text style={styles.recurringText}>
+                        set how many days after penalty calculate again
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Penalty Type</Text>
+                    <Dropdown
+                      data={penaltyTypeArray.map((option) => ({
+                        label: option,
+                        value: option,
+                      }))}
+                      onChange={(selectedValue) => {
+                        setPenaltyType(selectedValue);
+                      }}
+                      placeholder="Select "
+                      initialValue={penaltyType}
+                    />
+                  </View>
+                  {penaltyType === "Fixed Price" && (
+                    <View style={styles.section}>
+                      <Text style={styles.label}>Fixed Price</Text>
+                      <TextInput
+                        style={styles.penaltyTextInput}
+                        placeholder="0.00"
+                        value={fixPricePenalty}
+                        onChangeText={setfixPricePenalty}
+                        keyboardType={"numeric"}
+                      />
+                    </View>
+                  )}
+                  {penaltyType === "Percentage" && (
+                    <View style={styles.section}>
+                      <Text style={styles.label}>Percentage (%)</Text>
+                      <TextInput
+                        style={styles.penaltyTextInput}
+                        placeholder="0.00"
+                        value={percentPenalty}
+                        onChangeText={setPercentPenalty}
+                        keyboardType={"numeric"}
+                      />
+                    </View>
+                  )}
+
+                  {/* Penalty Ledger Account */}
+                  <View style={styles.section}>
+                    <Text style={styles.label}>Ledger Account</Text>
+                    <Dropdown
+                      data={accountFromOptions.map((option) => ({
+                        label: option.label,
+                        value: option.value,
+                      }))}
+                      onChange={(selectedValue) => {
+                        setLedgerAccountPenalty(selectedValue);
+
+                        // Find the selected account to get its group
+                        const selectedOption = accountFromOptions.find(
+                          (option) => option.value === selectedValue
+                        );
+                        if (selectedOption) {
+                          setLedgerAccountGroupPenalty(selectedOption.group); // Set the group name
+                        }
+                      }}
+                      placeholder="Select Account"
+                      initialValue={ledgerAccountPenalty}
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+
+            <Button mode="contained" onPress={navigateToNextScreen}>
+              Next
+            </Button>
+          </>
+        )}
+        keyExtractor={(item, index) => index.toString()}
+        contentContainerStyle={styles.scrollContainer}
+      />
     </View>
-
-      <Button mode="contained" onPress={navigateToNextScreen}>
-          Next
-        </Button>
-        </>
-    )}
-    keyExtractor={(item, index) => index.toString()}
-    contentContainerStyle={styles.scrollContainer}
-  />
-
-    </View>
-
-
-    
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF",},
-  sectiond: {
-    marginBottom: 20,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 10,
-    padding: 15,
-    elevation: 2,
-  },
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
+
   cardview: {
     marginBottom: 16,
     padding: 16,
@@ -633,16 +741,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     marginBottom: 10,
-  },
-  input: {
-    marginBottom: 15,
-  },
-  dropdownContainer: {
-    marginBottom: 15,
-  },
-  addButton: {
-    marginTop: 10,
-    marginBottom: 15,
   },
   listItem: {
     position: "relative",
@@ -673,46 +771,45 @@ const styles = StyleSheet.create({
   actionButton: {
     marginLeft: 8, // Space between icons
   },
-  switchContainer: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", // Ensures vertical alignment 
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center", // Ensures vertical alignment
   },
-  label: { 
+  label: {
     fontSize: 14,
     fontWeight: "bold",
     marginBottom: 6,
-    flexShrink: 1, // Prevents text from pushing the switch 
-    },
+    flexShrink: 1, // Prevents text from pushing the switch
+  },
   scrollContainer: { padding: 16, paddingBottom: 100 },
   section: { marginBottom: 10 },
-  
-  
+
   addButtonNew: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
     paddingVertical: 15,
     paddingHorizontal: 20,
     elevation: 4, // For shadow (Android)
-    shadowColor: '#000', // For shadow (iOS)
+    shadowColor: "#000", // For shadow (iOS)
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
     marginVertical: 10,
   },
   buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   addButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    fontWeight: "600",
+    color: "#000",
     marginLeft: 8,
   },
   penaltyTextInput: {
-    borderBottomColor : "black",
+    borderBottomColor: "black",
     borderBottomWidth: 1,
   },
   recurringText: {
@@ -723,31 +820,6 @@ const styles = StyleSheet.create({
     alignItems: "center", // Centers text inside
     marginLeft: 6,
   },
-  selectedMembersContainer: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  marginTop: 8,
-},
-memberChip: {
-  flexDirection: "row",
-  alignItems: "center",
-  backgroundColor: "#6200ee", // nice purple chip
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: 20,
-  marginRight: 8,
-  marginBottom: 8,
-},
-memberText: {
-  color: "#fff",
-  marginRight: 6,
-  fontSize: 13,
-},
-
 });
 
 export default CreateSpecialBill;
-
-
-
- 

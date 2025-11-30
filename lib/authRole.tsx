@@ -36,6 +36,9 @@ export function AuthRoleProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(false); // mark explicitly
         setLoading(false);
         setUserName(null);
+      } else {
+        setIsAuthenticated(true); // ✅ mark authenticated immediately
+        setLoading(false); // ✅ stop loading even before Firestore returns
       }
     });
     return () => unsubAuth();
@@ -43,20 +46,25 @@ export function AuthRoleProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
+    let isActive = true; // ✅ Prevent race conditions after logout
     const ref = doc(db, "users", user.uid);
     const unsubRole = onSnapshot(
       ref,
       (snap) => {
+        if (!isActive) return; // ✅ Guard
         const data = snap.data();
         const r = (snap.data()?.role as Role) ?? null;
         setRole(r);
         setIsAuthenticated(true);
         setLoading(false);
-        setUserName(data?.name || data?.firstName);
+        setUserName(data?.displayName || data?.firstName);
       },
       () => setLoading(false)
     );
-    return () => unsubRole();
+    return () => {
+      isActive = false; // ✅ prevent callback from firing after cleanup
+      unsubRole();
+    };
   }, [user]);
 
   const value = useMemo(

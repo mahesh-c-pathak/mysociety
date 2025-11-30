@@ -1,13 +1,42 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Alert } from "react-native";
 import { DrawerContentScrollView, DrawerItem } from "@react-navigation/drawer";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { logout } from "@/authService"; // ✅ your central logout function
+import { useRouter } from "expo-router";
+import { useAuthRole } from "@/lib/authRole";
 
 interface Props {
   navigation: any;
 }
 
 export default function CustomDrawerContent(props: Props) {
+  const router = useRouter();
+  const { userName } = useAuthRole();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await logout(); // ✅ Firebase signOut
+              router.replace("/login"); // redirect to login
+            } catch (error: any) {
+              Alert.alert("Logout Failed", error.message);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
       {/* Profile Header */}
@@ -15,7 +44,7 @@ export default function CustomDrawerContent(props: Props) {
         <View style={styles.avatar}>
           <MaterialCommunityIcons name="account" size={60} color="white" />
         </View>
-        <Text style={styles.name}>Mahesh Pathak</Text>
+        <Text style={styles.name}>{userName}</Text>
       </View>
 
       {/* Menu Items */}
@@ -105,10 +134,7 @@ export default function CustomDrawerContent(props: Props) {
           icon={({ size, color }) => (
             <MaterialCommunityIcons name="logout" size={size} color={color} />
           )}
-          onPress={() => {
-            // call your logout function here
-            console.log("Logout pressed");
-          }}
+          onPress={handleLogout}
         />
       </View>
     </DrawerContentScrollView>

@@ -9,13 +9,16 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
-import { Appbar, Button, TextInput } from "react-native-paper";
-import { useLocalSearchParams, useRouter, Stack } from "expo-router";
+import { Button, TextInput } from "react-native-paper";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Dropdown from "../../../utils/DropDown";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useSociety } from "../../../utils/SocietyContext";
 import { fetchSignedUrl } from "@/utils/imagekitUtils";
+import { sendInAppMessage } from "@/utils/sendInAppMessage";
+import AppbarComponent from "@/components/AppbarComponent";
+// import LoadingIndicator from "@/components/LoadingIndicator"; // new import
 
 const PaymentRecipt = () => {
   const router = useRouter();
@@ -34,6 +37,7 @@ const PaymentRecipt = () => {
     chequeNo,
     selectedBillsProperties,
     privateFilePath,
+    userIds,
   } = useLocalSearchParams();
 
   // Ensure these are strings
@@ -54,6 +58,9 @@ const PaymentRecipt = () => {
   // Toggle modal visibility
   const toggleModal = () => setIsModalVisible(!isModalVisible);
 
+  const parsedUserIds =
+    typeof userIds === "string" ? JSON.parse(userIds) : userIds || [];
+
   const reasonOptions = [
     { label: "Already Accepted Receipt", value: "Already Accepted Receipt" },
     { label: "Older Receipt", value: "Older Receipt" },
@@ -67,7 +74,9 @@ const PaymentRecipt = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(true);
@@ -129,18 +138,46 @@ const PaymentRecipt = () => {
       // Update or create the document
       await setDoc(unclearedBalanceDocRef, data, { merge: true });
 
-      console.log(`Transaction ${transactionId} updated successfully.`);
-      Alert.alert("Success", "Payment Request Rejected successfully.");
+      // 🔹 Send In-App Message to all users of that flat
+      if (parsedUserIds.length > 0) {
+        const title = `Receipt for ₹${formattedAmount} Rejected`;
+        const body = `Reject Reason ${reason}`;
+        console.log("Sending in-app messages to:", parsedUserIds);
 
-      // Navigate to FlatCollectionSummary
-      router.push({
-        pathname: "/admin/Collection/FlatCollectionSummary",
-        params: {
-          wing: formattedWing,
-          floorName: formattedFloorName,
-          flatNumber: formattedFlatNumber,
+        await Promise.all(
+          parsedUserIds.map((uid: string) =>
+            sendInAppMessage(
+              societyName as string,
+              uid,
+              title,
+              body,
+              "receipt_rejected",
+              `/member/myBill/Wallet` // 🔹 optional path
+            )
+          )
+        );
+
+        console.log("In-app messages sent successfully");
+      }
+
+      console.log(`Transaction ${transactionId} updated successfully.`);
+
+      // Alert with OK button. Navigate to FlatCollectionSummary
+      Alert.alert("Success", "Payment Request Rejected successfully.", [
+        {
+          text: "OK",
+          onPress: () => {
+            router.replace({
+              pathname: "/admin/Collection/FlatCollectionSummary",
+              params: {
+                wing: formattedWing,
+                floorName: formattedFloorName,
+                flatNumber: formattedFlatNumber,
+              },
+            });
+          },
         },
-      });
+      ]);
 
       // Close modal after successful update
       toggleModal();
@@ -152,13 +189,9 @@ const PaymentRecipt = () => {
 
   return (
     <View style={styles.container}>
-      {/* Remove Stack Header */}
-      <Stack.Screen options={{ headerShown: false }} />
       {/* Appbar Header */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Payment Receipt" />
-      </Appbar.Header>
+
+      <AppbarComponent title="Payment Receipt" source="Admin" />
 
       {/* Payment Details */}
       <View style={styles.card}>
@@ -253,6 +286,7 @@ const PaymentRecipt = () => {
                 chequeNo: formattedchequeNo,
                 selectedBillsProperties,
                 privateFilePath: privateFilePath,
+                userIds,
 
                 // Add other necessary params if available
               },
@@ -325,7 +359,7 @@ const DetailItem = ({ label, value }: { label: string; value: string }) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2196F3" },
+  header: { backgroundColor: "#6200ee" },
   card: {
     backgroundColor: "#FFF",
     elevation: 3,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -8,8 +8,17 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Card, Text, Button, Appbar } from "react-native-paper";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  Card,
+  Text,
+  Button,
+  Appbar,
+  Portal,
+  Dialog,
+  TextInput,
+  RadioButton,
+} from "react-native-paper";
 import { db } from "@/firebaseConfig";
 import {
   doc,
@@ -17,7 +26,11 @@ import {
   collection,
   getDocs,
   updateDoc,
+  deleteDoc,
+  setDoc,
 } from "firebase/firestore";
+
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const flatTypes = ["Owner", "Closed", "Rent", "Dead", "Shop"];
 const flatColors: Record<string, string> = {
@@ -37,8 +50,6 @@ type FloorData = {
   [flatNumber: string]: FlatData;
 };
 
-
-
 const WingSetupScreen: React.FC = () => {
   const { Wing, societyName } = useLocalSearchParams() as {
     Wing: string;
@@ -51,6 +62,7 @@ const WingSetupScreen: React.FC = () => {
     FloorData
   > | null>(null);
   const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
 
   const screenWidth = useWindowDimensions().width;
   const router = useRouter(); // Expo router for navigation
@@ -58,35 +70,40 @@ const WingSetupScreen: React.FC = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  
 
-  useEffect(() => {
-    const fetchWingData = async () => {
-      try {
-        const wingRef = doc(
-          db,
-          "Societies",
-          societyName as string,
-          customWingsSubcollectionName,
-          Wing as string
-        );
-        const wingSnap = await getDoc(wingRef);
+  const [showFlatDialog, setShowFlatDialog] = useState(false);
+  const [flatInput, setFlatInput] = useState("");
+  const [pendingFloor, setPendingFloor] = useState<string | null>(null);
 
-        if (!wingSnap.exists()) {
-          alert("Wing does not exist!");
-          return;
-        }
+  const [mode, setMode] = useState<"status" | "add" | "delete">("status");
 
-        const floorsRef = collection(wingRef, customFloorsSubcollectionName);
-        const floorSnaps = await getDocs(floorsRef);
+  const fetchWingData = async () => {
+    try {
+      const wingRef = doc(
+        db,
+        "Societies",
+        societyName as string,
+        customWingsSubcollectionName,
+        Wing as string
+      );
+      const wingSnap = await getDoc(wingRef);
 
-        if (floorSnaps.empty) {
-          alert(`No data found for Wing ${Wing}`);
-          return;
-        }
+      if (!wingSnap.exists()) {
+        alert("Wing does not exist!");
+        return;
+      }
 
-        const fetchedFloorData: Record<string, FloorData> = {};
-        for (const floorDoc of floorSnaps.docs) {
+      const floorsRef = collection(wingRef, customFloorsSubcollectionName);
+      const floorSnaps = await getDocs(floorsRef);
+
+      if (floorSnaps.empty) {
+        alert(`No data found for Wing ${Wing}`);
+        return;
+      }
+
+      const fetchedFloorData: Record<string, FloorData> = {};
+      await Promise.all(
+        floorSnaps.docs.map(async (floorDoc) => {
           const flatsRef = collection(
             floorDoc.ref,
             customFlatsSubcollectionName
@@ -101,21 +118,27 @@ const WingSetupScreen: React.FC = () => {
           });
 
           fetchedFloorData[floorDoc.id] = flatData;
-        }
+        })
+      );
 
-        setFloorData(fetchedFloorData);
-        setOriginalFloorData(JSON.parse(JSON.stringify(fetchedFloorData)));
-        // console.log("fetchedFloorData", fetchedFloorData);
-      } catch (error) {
-        console.error("Error fetching wing data:", error);
-        alert("Failed to fetch data. Please try again.");
-      } finally {
-        setLoading(false);
-      }
-    };
+      setFloorData(fetchedFloorData);
+      setOriginalFloorData(JSON.parse(JSON.stringify(fetchedFloorData)));
+      // console.log("fetchedFloorData", fetchedFloorData);
+    } catch (error) {
+      console.error("Error fetching wing data:", error);
+      alert("Failed to fetch data. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchWingData();
-  }, [Wing, customFlatsSubcollectionName, customFloorsSubcollectionName, customWingsSubcollectionName, societyName]);
+  useFocusEffect(
+    useCallback(() => {
+      setFloorData({});
+      setLoading(true);
+      fetchWingData();
+    }, [Wing])
+  );
 
   const handleFlatPress = (floor: string, flatNumber: string) => {
     if (floorData) {
@@ -148,21 +171,44 @@ const WingSetupScreen: React.FC = () => {
     const backgroundColor = flatColors[flatType] || flatColors["Owner"]; // Fallback color
 
     return (
-      <TouchableOpacity onPress={() => handleFlatPress(floor, item)}>
+      <View
+        style={{
+          position: "relative",
+          width: screenWidth / 3 - 20,
+        }}
+      >
         <Card
           style={[
             styles.card,
-            { width: screenWidth / 3 - 10, backgroundColor },
+            {
+              backgroundColor,
+              height: 48,
+            },
           ]}
           mode="elevated"
         >
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.cardText}>
-              {item}
-            </Text>
-          </Card.Content>
+          {/* 🔹 Delete icon in top-right corner */}
+          <TouchableOpacity
+            onPress={() => mode === "status" && handleFlatPress(floor, item)}
+          >
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.cardText}>
+                {item}
+              </Text>
+            </Card.Content>
+          </TouchableOpacity>
         </Card>
-      </TouchableOpacity>
+        {/* ❌ Delete icon (top-right corner of the card) */}
+        {/* Show Delete Icon only in Delete mode */}
+        {mode === "delete" && (
+          <TouchableOpacity
+            onPress={() => handleDeleteFlat(floor, item)}
+            style={styles.deleteIcon}
+          >
+            <Text style={styles.deleteText}>×</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -223,7 +269,7 @@ const WingSetupScreen: React.FC = () => {
           text: "NO",
           onPress: () =>
             router.push({
-              pathname: "/setupsociety/SetupWingsScreen", 
+              pathname: "/setupsociety/SetupWingsScreen",
               params: { societyName },
             }),
           style: "cancel",
@@ -259,8 +305,8 @@ const WingSetupScreen: React.FC = () => {
                 });
               }
               // After all updates, navigate to SetupWingsScreen
-              router.push({
-                pathname: "/setupsociety/SetupWingsScreen", 
+              router.replace({
+                pathname: "/setupsociety/SetupWingsScreen",
                 params: { societyName },
               });
             } catch (error) {
@@ -272,11 +318,161 @@ const WingSetupScreen: React.FC = () => {
       ]);
     } else {
       router.push({
-        pathname: "/setupsociety/SetupWingsScreen", 
+        pathname: "/setupsociety/SetupWingsScreen",
         params: { societyName },
       });
     }
   };
+
+  // 🔹 Delete Flat
+  const handleDeleteFlat = (floor: string, flatNumber: string) => {
+    Alert.alert("Delete Flat", `Delete flat ${flatNumber}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            const flatRef = doc(
+              db,
+              "Societies",
+              societyName,
+              customWingsSubcollectionName,
+              Wing,
+              customFloorsSubcollectionName,
+              floor,
+              customFlatsSubcollectionName,
+              flatNumber
+            );
+            await deleteDoc(flatRef);
+            setFloorData((prev) => {
+              const updated = { ...prev };
+              delete updated[floor][flatNumber];
+
+              return updated;
+            });
+          } catch (e) {
+            console.error(e);
+            Alert.alert("Error", "Failed to delete flat.");
+          }
+        },
+      },
+    ]);
+  };
+
+  // 🔹 Add new floor (single function)
+  const handleAddFloor = async () => {
+    try {
+      const hasGround = Object.keys(floorData).includes("Floor G");
+      let newFloorName = "Floor G";
+
+      if (hasGround) {
+        // Find all SB floors
+        const sbFloors = Object.keys(floorData).filter((f) =>
+          f.startsWith("Floor SB")
+        );
+        const nextIndex =
+          sbFloors.length > 0
+            ? Math.max(
+                ...sbFloors.map((f) => parseInt(f.replace("Floor SB", "")))
+              ) + 1
+            : 1;
+        newFloorName = `Floor SB${nextIndex}`;
+      }
+
+      // Step 1: Create floor doc
+      const floorRef = doc(
+        db,
+        "Societies",
+        societyName,
+        customWingsSubcollectionName,
+        Wing,
+        customFloorsSubcollectionName,
+        newFloorName
+      );
+      await setDoc(floorRef, { createdAt: new Date() });
+
+      // Step 2: Ask for flat names (comma separated)
+      setPendingFloor(newFloorName);
+      setFlatInput("");
+      setShowFlatDialog(true);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Could not add floor.");
+    }
+  };
+
+  // 🔹 Confirm flat names input and add to Firestore
+  const handleConfirmFlats = async () => {
+    if (!pendingFloor) return;
+
+    const flats = flatInput
+      .split(",")
+      .map((f) => f.trim())
+      .filter(Boolean);
+
+    if (flats.length === 0) {
+      Alert.alert("Error", "Enter at least one flat name.");
+      return;
+    }
+
+    try {
+      const updates: FloorData = {};
+      for (const flat of flats) {
+        const flatRef = doc(
+          db,
+          "Societies",
+          societyName,
+          customWingsSubcollectionName,
+          Wing,
+          customFloorsSubcollectionName,
+          pendingFloor,
+          customFlatsSubcollectionName,
+          flat
+        );
+        await setDoc(flatRef, { flatType: "Owner", resident: "Owner" });
+        updates[flat] = { flatType: "Owner", resident: "Owner" };
+      }
+
+      setFloorData((prev) => ({ ...prev, [pendingFloor]: updates }));
+
+      setShowFlatDialog(false);
+      setPendingFloor(null);
+      // Re-run screen lifecycle (triggers useFocusEffect or useEffect)
+      router.replace({
+        pathname: "/setupsociety/WingSetupScreen",
+        params: { societyName, Wing },
+      });
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Failed to add flats.");
+    }
+  };
+
+  const handleCancelAddFlats = async () => {
+    if (!pendingFloor) return;
+
+    try {
+      const floorRef = doc(
+        db,
+        "Societies",
+        societyName,
+        customWingsSubcollectionName,
+        Wing,
+        customFloorsSubcollectionName,
+        pendingFloor
+      );
+      await deleteDoc(floorRef); // remove the just-added floor
+      console.log(`Deleted pending floor: ${pendingFloor}`);
+    } catch (error) {
+      console.error("Failed to delete pending floor:", error);
+    } finally {
+      setPendingFloor(null);
+      setShowFlatDialog(false);
+    }
+  };
+
+  // 🔹 Activity Indicator
 
   if (loading) {
     return (
@@ -324,6 +520,7 @@ const WingSetupScreen: React.FC = () => {
         >
           Setup Again?
         </Button>
+        {/* Legend Section */}
         <View style={styles.legendContainer}>
           {flatTypes.map((type) => (
             <View key={type} style={styles.legendItem}>
@@ -337,9 +534,65 @@ const WingSetupScreen: React.FC = () => {
             </View>
           ))}
         </View>
+
+        {/* ✅ Radio Buttons Section */}
+        <View style={styles.radioGroup}>
+          <View style={styles.radioItem}>
+            <RadioButton
+              value="status"
+              status={mode === "status" ? "checked" : "unchecked"}
+              onPress={() => setMode("status")}
+            />
+            <Text>Change Flat Status</Text>
+          </View>
+
+          <View style={styles.radioItem}>
+            <RadioButton
+              value="add"
+              status={mode === "add" ? "checked" : "unchecked"}
+              onPress={() => setMode("add")}
+            />
+            <Text>Add Floor</Text>
+          </View>
+
+          <View style={styles.radioItem}>
+            <RadioButton
+              value="delete"
+              status={mode === "delete" ? "checked" : "unchecked"}
+              onPress={() => setMode("delete")}
+            />
+            <Text>Delete Flats</Text>
+          </View>
+        </View>
+
+        {/* ✅ Show Add Floor button only in Add mode */}
+        {mode === "add" && (
+          <Button
+            icon="plus"
+            mode="contained-tonal"
+            style={{ marginVertical: 8, marginHorizontal: 48 }}
+            onPress={handleAddFloor}
+          >
+            Add Floor
+          </Button>
+        )}
+
         <ScrollView style={styles.scrollcontainer} horizontal={true}>
           <FlatList
-            data={Object.entries(floorData || {})}
+            data={Object.entries(floorData || {}).sort(([a], [b]) => {
+              const extractNumber = (floor: string): number => {
+                if (floor === "Floor G") return 0; // Ground = 0
+
+                const sbMatch = floor.match(/SB(\d+)/); // SB1, SB2, ...
+                if (sbMatch) return -parseInt(sbMatch[1], 10); // Below ground = negative
+
+                const upMatch = floor.match(/(\d+)/); // Floor 1, Floor 2, ...
+                return upMatch ? parseInt(upMatch[1], 10) : 0;
+              };
+
+              // 🔁 Sort from highest to lowest
+              return extractNumber(b) - extractNumber(a);
+            })}
             keyExtractor={([floor]) => floor}
             renderItem={renderFloor}
             //scrollEnabled={false} // Disable scrolling
@@ -347,12 +600,34 @@ const WingSetupScreen: React.FC = () => {
           />
         </ScrollView>
 
-        <ScrollView horizontal style={styles.scrollView}></ScrollView>
-        <View style={styles.fixedButtonContainer}>
-        <Button mode="contained" onPress={handleContinue} style={styles.button}>
-          Continue
-        </Button>
+        <View style={[styles.fixedButtonContainer, { bottom: insets.bottom }]}>
+          <Button
+            mode="contained"
+            onPress={handleContinue}
+            style={styles.button}
+          >
+            Continue
+          </Button>
         </View>
+
+        {/* 🔹 Flat names dialog */}
+        <Portal>
+          <Dialog visible={showFlatDialog} onDismiss={handleCancelAddFlats}>
+            <Dialog.Title>Add Flats to {pendingFloor}</Dialog.Title>
+            <Dialog.Content>
+              <TextInput
+                label="Enter flat numbers (comma separated)"
+                value={flatInput}
+                onChangeText={setFlatInput}
+                autoFocus
+              />
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={handleCancelAddFlats}>Cancel</Button>
+              <Button onPress={handleConfirmFlats}>Add Flats</Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </View>
     </>
   );
@@ -361,25 +636,21 @@ const WingSetupScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   scrollcontainer: {
-    margin: 8,
+    margin: 16,
     flexGrow: 1,
     backgroundColor: "#DAD8C9",
     padding: 8,
+    marginBottom: 80, // ✅ adds visible gap from bottom
   },
   header: { backgroundColor: "#6200ee" },
   titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   heading: {
     fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 16,
+    marginBottom: 8,
     textAlign: "center",
   },
-  floorHeading: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 16,
-    marginBottom: 8,
-  },
+
   flatListContent: { paddingHorizontal: 8, flexGrow: 1 },
   card: {
     margin: 4,
@@ -394,11 +665,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
   },
-  button: { marginTop: 16, alignSelf: "center" },
+  button: { marginTop: 2, alignSelf: "center" },
   legendContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginTop: 16,
+    marginTop: 8,
   },
   legendItem: {
     alignItems: "center",
@@ -410,51 +681,37 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
-  scrollView: {
-    flexGrow: 1,
-    padding: 6,
-  },
-  scrollContent: {
-    flexDirection: "column", // Stack floors vertically
-    paddingHorizontal: 16,
-    flexGrow: 1,
-  },
-  floorContainer: {
-    marginBottom: 8,
-  },
-  floorTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: "row", // Flats in a row
-    flexWrap: "wrap",
-  },
-  flatContainer: {
-    backgroundColor: "#4caf50",
-    margin: 4,
-    width: 60,
-    height: 60,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 8,
-  },
-  flatText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
   fixedButtonContainer: {
-  position: "absolute",
-  bottom: 40,
-  left: 0,
-  right: 0,
-  padding: 16,
-  backgroundColor: "#fff", // ensures button is visible on top of list
-  borderTopWidth: 1,
-  borderTopColor: "#ddd",
-  
-},
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 8,
+    backgroundColor: "#fff", // ensures button is visible on top of list
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+  },
+  radioGroup: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginVertical: 12,
+    alignItems: "center",
+    marginHorizontal: 12,
+  },
+  radioItem: { flexDirection: "row", alignItems: "center" },
+  deleteIcon: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    zIndex: 5,
+    backgroundColor: "white",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteText: { color: "#ff0000", fontSize: 16, fontWeight: "bold" },
 });
 
 export default WingSetupScreen;

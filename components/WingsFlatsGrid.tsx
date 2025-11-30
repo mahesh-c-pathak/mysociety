@@ -8,6 +8,7 @@ import {
   ScrollView,
   Pressable,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type FlatData = {
   flatType: string;
@@ -19,13 +20,14 @@ type FlatData = {
 
 type FlatsData = Record<string, Record<string, Record<string, FlatData>>>;
 
-const flatTypes = ["owner", "Closed", "Rent", "Dead", "Shop"];
+const flatTypes = ["owner", "Closed", "Rent", "Dead", "Shop", "Registerd"];
 const flatColors: Record<string, string> = {
   owner: "#2196F3",
   Closed: "#808080",
   Rent: "#FFA500",
   Dead: "#000000",
   Shop: "#FF00FF",
+  Registerd: "#2E8B57", // Green
 };
 
 interface WingsFlatsGridProps {
@@ -37,13 +39,16 @@ interface WingsFlatsGridProps {
     wing: string
   ) => void;
   initialSelectedWing?: string | null; // new prop
+  showRegisteredLegend?: boolean; // ✅ optional, defaults to false
 }
 
 const WingsFlatsGrid: React.FC<WingsFlatsGridProps> = ({
   flatsData,
   onFlatPress,
   initialSelectedWing = null,
+  showRegisteredLegend = false, // ✅ default false
 }) => {
+  const insets = useSafeAreaInsets();
   const [selectedWing, setSelectedWing] = useState<string | null>(
     initialSelectedWing
   );
@@ -99,22 +104,27 @@ const WingsFlatsGrid: React.FC<WingsFlatsGridProps> = ({
 
       {/* Legend */}
       <View style={styles.legendContainer}>
-        {flatTypes.map((type) => (
-          <View key={type} style={styles.legendItem}>
-            <View style={styles.legendcountContainer}>
-              <View
-                style={[
-                  styles.legendColor,
-                  { backgroundColor: flatColors[type] },
-                ]}
-              />
-              <Text style={styles.legendText}>
-                ({flatTypeCounts[type] || 0})
-              </Text>
+        {flatTypes
+          .filter((type) => {
+            if (type === "Registerd" && !showRegisteredLegend) return false;
+            return true;
+          })
+          .map((type) => (
+            <View key={type} style={styles.legendItem}>
+              <View style={styles.legendcountContainer}>
+                <View
+                  style={[
+                    styles.legendColor,
+                    { backgroundColor: flatColors[type] },
+                  ]}
+                />
+                <Text style={styles.legendText}>
+                  ({flatTypeCounts[type] || 0})
+                </Text>
+              </View>
+              <Text style={styles.legendText}>{type}</Text>
             </View>
-            <Text style={styles.legendText}>{type}</Text>
-          </View>
-        ))}
+          ))}
       </View>
 
       {/* Flats grid */}
@@ -122,52 +132,78 @@ const WingsFlatsGrid: React.FC<WingsFlatsGridProps> = ({
         <>
           <Text style={styles.headingText}>Wing {selectedWing}</Text>
           <View style={styles.outerscrollContent}>
-            <ScrollView horizontal style={styles.scrollView}>
-              <View style={styles.scrollContent}>
-                {Object.keys(flatsData[selectedWing])
-                  .sort((a, b) => {
-                    const extractNumber = (floor: string): number => {
-                      if (floor === "Floor G") return -1;
-                      const num = floor.match(/\d+/);
-                      return num ? parseInt(num[0], 10) : NaN;
-                    };
-                    return extractNumber(b) - extractNumber(a);
-                  })
-                  .map((floor) => (
-                    <View key={floor} style={styles.floorContainer}>
-                      <View style={styles.row}>
-                        {Object.keys(flatsData[selectedWing][floor]).map(
-                          (flat) => {
-                            const flatData =
-                              flatsData[selectedWing][floor][flat];
-                            const flatColor =
-                              flatColors[flatData.flatType] ||
-                              flatColors["owner"];
-                            return (
-                              <TouchableOpacity
-                                key={flat}
-                                style={[
-                                  styles.flatContainer,
-                                  { backgroundColor: flatColor },
-                                ]}
-                                onPress={() =>
-                                  onFlatPress(
-                                    flat,
-                                    flatData.flatType,
-                                    floor,
-                                    selectedWing
-                                  )
-                                }
-                              >
-                                <Text style={styles.flatText}>{flat}</Text>
-                              </TouchableOpacity>
-                            );
-                          }
-                        )}
+            <ScrollView style={styles.verticalScroll}>
+              <ScrollView
+                horizontal
+                style={styles.scrollView}
+                contentContainerStyle={{
+                  paddingBottom: insets.bottom + 100,
+                }}
+              >
+                <View style={styles.scrollContent}>
+                  {Object.keys(flatsData[selectedWing])
+                    .sort((a, b) => {
+                      const extractNumber = (floor: string): number => {
+                        if (floor === "Floor G") return -1;
+                        const num = floor.match(/\d+/);
+                        return num ? parseInt(num[0], 10) : NaN;
+                      };
+                      return extractNumber(b) - extractNumber(a);
+                    })
+                    .map((floor) => (
+                      <View key={floor} style={styles.floorContainer}>
+                        <View style={styles.row}>
+                          {Object.keys(flatsData[selectedWing][floor]).map(
+                            (flat) => {
+                              const flatData =
+                                flatsData[selectedWing][floor][flat];
+
+                              // 🧠 Skip rendering if flatType is "dead" (case-insensitive)
+                              if (flatData.flatType?.toLowerCase() === "dead") {
+                                return (
+                                  <View
+                                    key={flat}
+                                    style={{
+                                      width: 70, // keep consistent layout
+                                      height: 60,
+                                      margin: 4,
+                                    }}
+                                  />
+                                );
+                              }
+
+                              const flatColor =
+                                flatData.memberStatus === "Registered" &&
+                                showRegisteredLegend
+                                  ? flatColors["Registerd"]
+                                  : flatColors[flatData.flatType] ||
+                                    flatColors["owner"];
+                              return (
+                                <TouchableOpacity
+                                  key={flat}
+                                  style={[
+                                    styles.flatContainer,
+                                    { backgroundColor: flatColor },
+                                  ]}
+                                  onPress={() =>
+                                    onFlatPress(
+                                      flat,
+                                      flatData.flatType,
+                                      floor,
+                                      selectedWing
+                                    )
+                                  }
+                                >
+                                  <Text style={styles.flatText}>{flat}</Text>
+                                </TouchableOpacity>
+                              );
+                            }
+                          )}
+                        </View>
                       </View>
-                    </View>
-                  ))}
-              </View>
+                    ))}
+                </View>
+              </ScrollView>
             </ScrollView>
           </View>
         </>
@@ -243,6 +279,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   outerscrollContent: {
+    flex: 1,
     margin: 16,
     paddingHorizontal: 4,
     paddingTop: 8,
@@ -250,6 +287,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0e0e0",
     borderRadius: 8,
+    marginBottom: 64,
   },
   scrollContent: {
     flexDirection: "column",
@@ -278,5 +316,8 @@ const styles = StyleSheet.create({
   flatText: {
     color: "#FFFFFF",
     fontWeight: "bold",
+  },
+  verticalScroll: {
+    flexGrow: 0,
   },
 });

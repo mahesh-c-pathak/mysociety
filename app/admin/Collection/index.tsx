@@ -1,12 +1,11 @@
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Pressable,
   ActivityIndicator,
   ScrollView,
-  TouchableWithoutFeedback,
+  FlatList,
 } from "react-native";
 import React, { useEffect, useState } from "react";
 
@@ -14,21 +13,15 @@ import { useNavigation } from "@react-navigation/native";
 
 import { useRouter } from "expo-router";
 import { db } from "@/firebaseConfig";
-import {
-  collection,
-  getDocs,
-  collectionGroup,
-  query,
-  where,
-  orderBy,
-  limit,
-} from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 
 import { useSociety } from "@/utils/SocietyContext";
 
 import AppbarComponent from "@/components/AppbarComponent";
 import AppbarMenuComponent from "@/components/AppbarMenuComponent";
 import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+import { getFlatCurrentBalance } from "@/utils/getFlatCurrentBalance";
+
 // Define the structure of flatsData
 type FlatData = {
   flatType: string;
@@ -73,13 +66,23 @@ const CollectionNew = () => {
   const { societyName: mysocietyName } = useSociety();
 
   const [loading, setLoading] = useState(true);
+  const [loadingWing, setLoadingWing] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   const router = useRouter();
   useCustomBackHandler("/admin"); // back always goes to Screen3
 
   const navigation = useNavigation();
 
   const customFlatsSubcollectionName = `${mysocietyName} flats`;
-  const customFlatsBillsSubcollectionName = `${mysocietyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${mysocietyName} bills`;
+
+  const customFlatsBillsSubcollectionName = "flatbills";
+
+  const customWingsSubcollectionName = `${mysocietyName} wings`;
+  const [wings, setWings] = useState<string[]>([]);
+
+  const customFloorsSubcollectionName = `${mysocietyName} floors`;
 
   const [selectedWing, setSelectedWing] = useState<string | null>(null);
 
@@ -91,7 +94,7 @@ const CollectionNew = () => {
   const currentDate = new Date();
   currentDate.setUTCHours(0, 0, 0, 0); // Normalize to start of day in UTC
 
-  const dateString = new Date().toISOString().split("T")[0];
+  // const dateString = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
     // Dynamically hide the header for this screen
@@ -121,124 +124,217 @@ const CollectionNew = () => {
   };
 
   useEffect(() => {
-    const fetchflatbillStatus = async () => {
+    const fetchWings = async () => {
+      if (!mysocietyName) {
+        console.error("Error: Society name (localName) is missing.");
+        setLoading(false);
+        return;
+      }
       setLoading(true);
+
       try {
-        const flatsQuerySnapshot = await getDocs(
-          collectionGroup(db, customFlatsSubcollectionName)
+        const wingsCollectionRef = collection(
+          db,
+          "Societies",
+          mysocietyName,
+          customWingsSubcollectionName
         );
-        const data: Record<string, any> = {};
-        for (const flatDoc of flatsQuerySnapshot.docs) {
-          const flatData = flatDoc.data();
-          const flatId = flatDoc.id;
-
-          const flatPath = flatDoc.ref.path;
-          const pathSegments = flatPath.split("/");
-          const wing = pathSegments[3];
-          const floor = pathSegments[5];
-
-          if (!data[wing]) data[wing] = {};
-          if (!data[wing][floor]) data[wing][floor] = {};
-
-          const flatType = flatData.flatType || "";
-
-          const flatbillRef = collection(
-            flatDoc.ref,
-            customFlatsBillsSubcollectionName
-          );
-          // const flatbillsdsnapshot = await getDocs(flatbillRef);
-          const currentBalanceSubcollectionName = `currentBalance_${flatId}`;
-          const currentBalanceSubcollection = collection(
-            flatDoc.ref,
-            currentBalanceSubcollectionName
-          );
-          const currentBalancequery = query(
-            currentBalanceSubcollection,
-            where("date", "<=", dateString),
-            orderBy("date", "desc"),
-            limit(1)
-          );
-
-          // Fetch both collections in parallel
-          const [flatbillsdsnapshot, currentBalancesnapshot] =
-            await Promise.all([
-              getDocs(flatbillRef),
-              getDocs(currentBalancequery),
-            ]);
-
-          // set current balance
-          let flatCurrentBalance = 0;
-          if (!currentBalancesnapshot.empty) {
-            const data = currentBalancesnapshot.docs[0].data();
-            flatCurrentBalance += data.cumulativeBalance;
-          }
-
-          const billStatuses: string[] = [];
-          let flatUnpaidAmount = 0;
-          let maxOverdueDays = 0; // Track max overdue days
-          for (const flatbillDoc of flatbillsdsnapshot.docs) {
-            const billData = flatbillDoc.data();
-
-            if (billData.status) {
-              if (billData.status === "unpaid") {
-                const billDueDate = billData.dueDate;
-                flatUnpaidAmount += billData.amount;
-                const billDueDateindatetype = new Date(
-                  billDueDate + "T00:00:00"
-                ); // Convert string to Date (UTC start of day)
-                billDueDateindatetype.setHours(0, 0, 0, 0); // Normalize date
-                // Calculate overdue days
-                // Convert dates to timestamps for subtraction
-                const overdueDays = Math.floor(
-                  (currentDate.getTime() - billDueDateindatetype.getTime()) /
-                    (1000 * 60 * 60 * 24)
-                );
-                if (overdueDays > 0) {
-                  billStatuses.push("overdue");
-
-                  maxOverdueDays = Math.max(maxOverdueDays, overdueDays); // Update max overdue days
-                } else {
-                  billStatuses.push(billData.status);
-                }
-              } else {
-                billStatuses.push(billData.status);
-              }
-            }
-          }
-
-          const { flatStatus, flatColor } = getFlatStatusAndColor(billStatuses);
-
-          // console.log( `Flat ID: ${flatDoc.id}, Status: ${flatStatus}, Color: ${flatColor}`);
-
-          data[wing][floor][flatId] = {
-            flatType,
-            resident: flatData.resident || "",
-            memberStatus: flatData.memberStatus || "",
-            ownerRegisterd: flatData.ownerRegisterd || "",
-            renterRegisterd: flatData.renterRegisterd || "",
-            billStatus: flatStatus,
-            overdueDays: maxOverdueDays, // Add overdue days to the state
-            billAmount: flatUnpaidAmount, // Add bill amount to the state
-            flatColor,
-            flatCurrentBalance,
-          };
+        const wingsSnapshot = await getDocs(wingsCollectionRef);
+        if (!wingsSnapshot.empty) {
+          const wingIds = wingsSnapshot.docs.map((doc) => doc.id);
+          setWings(wingIds);
+        } else {
+          console.warn("No wings found for society:", mysocietyName);
+          setWings([]);
         }
-        setFlatsData(data);
       } catch (error) {
-        console.error("Error fetching flats data:", error);
+        console.error("Error fetching wings:", error);
+        setWings([]);
       } finally {
         setLoading(false);
       }
     };
-    fetchflatbillStatus();
-  }, []);
+
+    fetchWings();
+  }, [customWingsSubcollectionName, mysocietyName]);
 
   useEffect(() => {
-    // Set the first wing as selected when flatsData is loaded
-    if (!selectedWing && Object.keys(flatsData).length > 0) {
-      setSelectedWing(Object.keys(flatsData)[0]); // Select the first wing (e.g., "A")
+    // Set the first wing as selected when wings are loaded
+    if (!selectedWing && wings.length > 0) {
+      setSelectedWing(wings[0]); // Select the first wing (e.g., "A")
     }
-  }, [flatsData]);
+  }, [wings, selectedWing]);
+
+  useEffect(() => {
+    const fetchFlatBillStatus = async () => {
+      try {
+        if (!mysocietyName || !selectedWing) {
+          console.warn("Society name or selected wing is missing.");
+          return;
+        }
+        // 🧠 Skip if data for this wing already exists
+        if (flatsData[selectedWing]) {
+          console.log(`✅ Using cached data for Wing ${selectedWing}`);
+          return;
+        }
+
+        console.log(`⬇️ Fetching data for Wing ${selectedWing}...`);
+        setLoadingWing(true);
+        setProgress(0);
+
+        const data: Record<string, any> = { ...flatsData };
+        data[selectedWing] = {}; // initialize this wing
+        const currentDate = new Date();
+
+        // Construct reference to the floors collection for the current wing
+        const floorsCollectionRef = collection(
+          db,
+          "Societies",
+          mysocietyName as string,
+          customWingsSubcollectionName,
+          selectedWing,
+          customFloorsSubcollectionName
+        );
+
+        const floorsSnapshot = await getDocs(floorsCollectionRef);
+
+        // Collect all flats across floors (in parallel)
+        const allnewFlatDocs: any[] = [];
+
+        if (!floorsSnapshot.empty) {
+          const floorPromises = floorsSnapshot.docs.map(async (floorDoc) => {
+            const floorName = floorDoc.id;
+            const flatsRef = collection(
+              floorDoc.ref,
+              customFlatsSubcollectionName
+            );
+            const flatsSnapshot = await getDocs(flatsRef);
+
+            return flatsSnapshot.docs.map((flatDoc) => ({
+              flatDoc,
+              floorName,
+            }));
+          });
+
+          // Wait for all floors to complete fetching in parallel
+          const floorResults = await Promise.all(floorPromises);
+
+          // Flatten the array of arrays into a single list
+          floorResults.forEach((floorFlats) => {
+            allnewFlatDocs.push(...floorFlats);
+          });
+        }
+
+        // ✅ Updated helper function for allnewFlatDocs
+        const processBatch = async (batch: typeof allnewFlatDocs) => {
+          await Promise.all(
+            batch.map(async ({ flatDoc, floorName }) => {
+              try {
+                const flatData = flatDoc.data();
+                const flatId = flatDoc.id;
+                const flatPath = flatDoc.ref.path;
+                const pathSegments = flatPath.split("/");
+                const wing = pathSegments[3];
+                const floor = floorName; // use provided floorName instead of parsing
+
+                if (!data[wing]) data[wing] = {};
+                if (!data[wing][floor]) data[wing][floor] = {};
+
+                const flatType = flatData.flatType || "";
+
+                // ✅ Fetch bills and balance in parallel
+                const flatBillsRef = collection(
+                  flatDoc.ref,
+                  customFlatsBillsSubcollectionName
+                );
+                const [billsSnapshot, flatCurrentBalance] = await Promise.all([
+                  getDocs(flatBillsRef),
+                  getFlatCurrentBalance(flatPath, mysocietyName, flatId),
+                ]);
+
+                // Process bills
+                const billStatuses: string[] = [];
+                let flatUnpaidAmount = 0;
+                let maxOverdueDays = 0;
+
+                billsSnapshot.forEach((billDoc) => {
+                  const billData = billDoc.data();
+                  if (!billData?.status) return;
+
+                  if (billData.status === "unpaid") {
+                    const dueDate = new Date(`${billData.dueDate}T00:00:00`);
+                    const overdueDays = Math.floor(
+                      (currentDate.getTime() - dueDate.getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    );
+                    if (overdueDays > 0) {
+                      billStatuses.push("overdue");
+                      maxOverdueDays = Math.max(maxOverdueDays, overdueDays);
+                    } else {
+                      billStatuses.push("unpaid");
+                    }
+                    flatUnpaidAmount += billData.amount || 0;
+                  } else {
+                    billStatuses.push(billData.status);
+                  }
+                });
+
+                const { flatStatus, flatColor } =
+                  getFlatStatusAndColor(billStatuses);
+
+                data[wing][floor][flatId] = {
+                  flatType,
+                  resident: flatData.resident || "",
+                  memberStatus: flatData.memberStatus || "",
+                  ownerRegisterd: flatData.ownerRegisterd || "",
+                  renterRegisterd: flatData.renterRegisterd || "",
+                  billStatus: flatStatus,
+                  overdueDays: maxOverdueDays,
+                  billAmount: flatUnpaidAmount,
+                  flatColor,
+                  flatCurrentBalance,
+                };
+              } catch (err) {
+                console.warn("Error processing flat:", err);
+              }
+            })
+          );
+        };
+
+        // 🚀 Process in batches of 25 to prevent overload
+        const BATCH_SIZE = 25;
+        for (let i = 0; i < allnewFlatDocs.length; i += BATCH_SIZE) {
+          const batch = allnewFlatDocs.slice(i, i + BATCH_SIZE);
+          await processBatch(batch);
+          setProgress(
+            Math.min(
+              100,
+              Math.round(((i + batch.length) / allnewFlatDocs.length) * 100)
+            )
+          );
+        }
+
+        setFlatsData(data);
+      } catch (error) {
+        console.error("Error fetching flats data:", error);
+      } finally {
+        setLoadingWing(false);
+      }
+    };
+
+    fetchFlatBillStatus();
+  }, [
+    customFlatsBillsSubcollectionName,
+    customFlatsSubcollectionName,
+    customFloorsSubcollectionName,
+    customWingsSubcollectionName,
+    mysocietyName,
+    selectedWing,
+  ]);
+
+  // console.log("flatsData", flatsData);
+  // console.log("");
+  // console.log("");
 
   useEffect(() => {
     if (selectedWing && flatsData[selectedWing]) {
@@ -276,10 +372,17 @@ const CollectionNew = () => {
   };
 
   const [menuVisible, setMenuVisible] = useState(false);
+
   const handleMenuOptionPress = (option: string) => {
     console.log(`${option} selected`);
-    setMenuVisible(false);
+    if (option === "Close Menu") {
+      setMenuVisible(false);
+    } else {
+      // Handle other options
+      console.log(`${option} clicked`);
+    }
   };
+
   const closeMenu = () => {
     setMenuVisible(false);
   };
@@ -288,90 +391,115 @@ const CollectionNew = () => {
     console.log("Reset Filter Pressed");
   };
 
-  const renderFlats = () => {
+  // Inside your component
+  const renderFlatsNew = () => {
     if (!selectedWing || !flatsData[selectedWing]) return null;
 
-    return (
-      <View style={styles.outerscrollContent}>
-        <ScrollView horizontal style={styles.scrollView}>
-          <View style={styles.scrollContent}>
-            {Object.keys(flatsData[selectedWing])
-              .sort((a: string, b: string) => {
-                const extractNumber = (floor: string): number => {
-                  if (floor === "Floor G") return -1; // Assign a low value to "Floor G"
-                  const num = floor.match(/\d+/);
-                  return num ? parseInt(num[0], 10) : NaN;
-                };
+    // Prepare a flat array of floors with their flats
+    const floorArray = Object.keys(flatsData[selectedWing])
+      .sort((a: string, b: string) => {
+        const extractNumber = (floor: string): number => {
+          if (floor === "Floor G") return -1;
+          const num = floor.match(/\d+/);
+          return num ? parseInt(num[0], 10) : NaN;
+        };
+        return extractNumber(b) - extractNumber(a);
+      })
+      .map((floor) => ({
+        floor,
+        flats: Object.keys(flatsData[selectedWing][floor]).map((flatId) => ({
+          flatId,
+          ...flatsData[selectedWing][floor][flatId],
+        })),
+      }));
 
-                return extractNumber(b) - extractNumber(a); // Sort descending
-              })
-              .map((floor) => (
-                <View key={floor} style={styles.floorContainer}>
-                  <View style={styles.row}>
-                    {Object.keys(flatsData[selectedWing][floor]).map((flat) => {
-                      const flatData = flatsData[selectedWing][floor][flat];
-                      const flatColor =
-                        flatData.flatColor || flatColors["paid"]; // Default to No Bill color if flatType is missing
-                      return (
-                        <TouchableOpacity
-                          key={flat}
-                          style={[
-                            styles.flatContainer,
-                            { backgroundColor: flatColor },
-                          ]}
-                          onPress={() =>
-                            handleFlatPress(
-                              flat,
-                              flatData.flatType,
-                              floor,
-                              selectedWing
-                            )
-                          }
-                        >
-                          <Text style={styles.flatText}>{flat}</Text>
-                          {flatData.billStatus.toLowerCase() === "unpaid" && (
-                            <Text style={styles.billText}>
-                              ₹ {flatData.billAmount}
-                            </Text>
-                          )}
-                          {flatData.billStatus === "overdue" && (
-                            <>
-                              <Text style={styles.billText}>
-                                {flatData.overdueDays} days
-                              </Text>
-                              <Text style={styles.billText}>
-                                ₹ {flatData.billAmount}
-                              </Text>
-                            </>
-                          )}
-                          {flatData.flatCurrentBalance > 0 && (
-                            <>
-                              <View
-                                style={{
-                                  backgroundColor: "#3F704D",
-                                  marginBottom: 2,
-                                  width: "100%",
-                                  justifyContent: "center",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <Text
-                                  style={[styles.billText, { fontSize: 12 }]}
-                                >
-                                  ₹{flatData.flatCurrentBalance.toFixed(2)}
-                                </Text>
-                              </View>
-                            </>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+    const renderFlatItem = (flat: any, floor: string) => {
+      // 🧠 Skip rendering if flatType is "dead"
+      if (flat.flatType?.toLowerCase() === "dead") {
+        return (
+          <View
+            key={flat.flatId}
+            style={{
+              width: 70, // keep consistent layout
+              height: 60,
+              margin: 4,
+            }}
+          />
+        );
+      }
+
+      return (
+        <Pressable
+          key={flat.flatId}
+          onLongPress={() =>
+            handleFlatPress(flat.flatId, flat.flatType, floor, selectedWing)
+          }
+          delayLongPress={300} // default is 500 ms, tweak as needed
+          style={({ pressed }) => [
+            styles.flatContainer,
+            {
+              backgroundColor: flat.flatColor || flatColors["paid"],
+              opacity: pressed ? 0.8 : 1,
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+            },
+          ]}
+        >
+          <Text style={styles.flatText}>{flat.flatId}</Text>
+          {flat.billStatus.toLowerCase() === "unpaid" && (
+            <Text style={styles.billText}>₹ {flat.billAmount}</Text>
+          )}
+          {flat.billStatus === "overdue" && (
+            <>
+              <Text style={styles.billText}>{flat.overdueDays} days</Text>
+              <Text style={styles.billText}>₹ {flat.billAmount}</Text>
+            </>
+          )}
+          {flat.flatCurrentBalance > 0 && (
+            <View
+              style={{
+                backgroundColor: "#3F704D",
+                marginBottom: 2,
+                width: "100%",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Text style={[styles.billText, { fontSize: 12 }]}>
+                ₹ {flat.flatCurrentBalance.toFixed(2)}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      );
+    };
+
+    return (
+      <ScrollView style={styles.scrollcontainer} horizontal={true}>
+        {loadingWing && (
+          <View style={styles.progressContainer}>
+            <View style={[styles.progressBar, { width: `${progress}%` }]} />
+            <Text style={styles.progressText}>Loading {progress}%</Text>
           </View>
-        </ScrollView>
-      </View>
+        )}
+        <FlatList
+          data={floorArray}
+          keyExtractor={(item) => item.floor}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+          renderItem={({ item }) => (
+            <View style={styles.floorContainer}>
+              <FlatList
+                data={item.flats}
+                keyExtractor={(flat) => flat.flatId}
+                renderItem={({ item: flat }) =>
+                  renderFlatItem(flat, item.floor)
+                }
+                horizontal={true}
+                scrollEnabled={false} // Disable scrolling
+              />
+            </View>
+          )}
+        />
+      </ScrollView>
     );
   };
 
@@ -384,86 +512,88 @@ const CollectionNew = () => {
   }
 
   return (
-    <TouchableWithoutFeedback onPress={closeMenu}>
-      <View style={styles.container}>
-        {/* Top Appbar */}
-        <AppbarComponent
-          title="Collection New"
-          source="Admin"
-          onPressFilter={() => resetFilters()}
-          onPressThreeDot={() => setMenuVisible(!menuVisible)}
+    <View style={styles.container}>
+      {/* Top Appbar */}
+      <AppbarComponent
+        title="Collection New"
+        source="Admin"
+        onPressFilter={() => resetFilters()}
+        onPressThreeDot={() => setMenuVisible(!menuVisible)}
+      />
+
+      {/* Three-dot Menu */}
+      {/* Custom Menu */}
+      {menuVisible && (
+        <AppbarMenuComponent
+          items={["Download PDF", "Download Excel", "Close Menu"]}
+          onItemPress={handleMenuOptionPress}
+          closeMenu={closeMenu}
         />
+      )}
 
-        {/* Three-dot Menu */}
-        {/* Custom Menu */}
-        {menuVisible && (
-          <AppbarMenuComponent
-            items={["Download PDF", "Download Excel"]}
-            onItemPress={handleMenuOptionPress}
-            closeMenu={closeMenu}
-          />
-        )}
-
-        {/* Select Wing */}
-        <View style={styles.toggleContainer}>
-          {Object.keys(flatsData).map((wing) => (
-            <Pressable
-              key={wing}
-              onPress={() => setSelectedWing(wing)}
+      {/* Select Wing */}
+      <ScrollView
+        horizontal
+        contentContainerStyle={styles.toggleContainer}
+        showsHorizontalScrollIndicator={false}
+      >
+        {wings.map((wing) => (
+          <Pressable
+            key={wing}
+            onPress={() => setSelectedWing(wing)}
+            style={[
+              styles.toggleButton,
+              selectedWing === wing && styles.selectedToggle,
+            ]}
+          >
+            <Text
               style={[
-                styles.toggleButton,
-                selectedWing === wing && styles.selectedToggle,
+                styles.toggleText,
+                selectedWing === wing && styles.selectedtoggleText,
               ]}
             >
-              <Text
+              {wing}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {/* Legend Container */}
+
+      <View style={styles.legendContainer}>
+        {StatusType.map((type) => (
+          <View key={type} style={styles.legendItem}>
+            <View style={styles.legendcountContainer}>
+              <View
                 style={[
-                  styles.toggleText,
-                  selectedWing === wing && styles.selectedtoggleText,
+                  styles.legendColor,
+                  { backgroundColor: StatusColor[type] },
                 ]}
-              >
-                {wing}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Legend Container */}
-
-        <View style={styles.legendContainer}>
-          {StatusType.map((type) => (
-            <View key={type} style={styles.legendItem}>
-              <View style={styles.legendcountContainer}>
-                <View
-                  style={[
-                    styles.legendColor,
-                    { backgroundColor: StatusColor[type] },
-                  ]}
-                />
-                <Text style={styles.legendText}>
-                  ({flatTypeCounts[type] || 0}) {/* Show count or 0 */}
-                </Text>
-              </View>
-              <Text style={[styles.legendText, { flexWrap: "wrap" }]}>
-                {type.split(" ").map((word, index) => (
-                  <Text key={index}>
-                    {word}
-                    {"\n"}
-                  </Text>
-                ))}
+              />
+              <Text style={styles.legendText}>
+                ({flatTypeCounts[type] || 0}) {/* Show count or 0 */}
               </Text>
             </View>
-          ))}
-        </View>
-
-        {/* Selected Wings Flat Grid */}
-
-        {selectedWing && (
-          <Text style={styles.headingText}>Wing {selectedWing}</Text>
-        )}
-
-        {renderFlats()}
+            <Text style={[styles.legendText, { flexWrap: "wrap" }]}>
+              {type.split(" ").map((word, index) => (
+                <Text key={index}>
+                  {word}
+                  {"\n"}
+                </Text>
+              ))}
+            </Text>
+          </View>
+        ))}
       </View>
-    </TouchableWithoutFeedback>
+
+      {/* Selected Wings Flat Grid */}
+
+      {selectedWing && (
+        <Text style={styles.headingText}>Wing {selectedWing}</Text>
+      )}
+
+      {renderFlatsNew()}
+    </View>
   );
 };
 
@@ -473,27 +603,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+    justifyContent: "flex-start", // 👈 prevents center-jump
   },
   loaderContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    backgroundColor: "#0288d1", // Match background color from the attached image
-    elevation: 4,
-  },
-  titleStyle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-  },
   toggleContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 16,
-    marginTop: 16,
     alignItems: "center",
+    margin: 16,
+    paddingRight: 48,
   },
   toggleButton: {
     margin: 8,
@@ -520,10 +642,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
-  flatList: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
 
   flatText: {
     color: "#FFFFFF",
@@ -536,36 +654,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 8,
   },
-  scrollView: {
-    flexGrow: 1,
-  },
-  outerscrollContent: {
-    margin: 16,
-    paddingHorizontal: 4,
-    paddingTop: 8,
-    backgroundColor: "#dddddd",
 
-    borderWidth: 1, // Optional for outline
-    borderColor: "#e0e0e0", // Optional for outline
-    borderRadius: 8,
-  },
-  scrollContent: {
-    flexDirection: "column", // Stack floors vertically
-    paddingHorizontal: 16,
-  },
   floorContainer: {
     marginBottom: 8,
   },
-  floorTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: "row", // Flats in a row
-    flexWrap: "wrap", // Allows multiple rows
-    justifyContent: "center", // Adjust as needed
-  },
+
   flatContainer: {
     backgroundColor: "#4caf50",
     margin: 4,
@@ -601,74 +694,36 @@ const styles = StyleSheet.create({
   legendcountContainer: {
     flexDirection: "row",
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
 
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // Dimmed background
-  },
-  modalContent: {
-    width: "80%", // Adjust modal width
-    backgroundColor: "#fff", // Modal background color
-    borderRadius: 10, // Rounded corners
-    padding: 20, // Inner padding
-    alignItems: "center", // Center content horizontally
-    shadowColor: "#000", // Shadow for iOS
-    shadowOffset: { width: 0, height: 2 }, // Shadow position
-    shadowOpacity: 0.25, // Shadow transparency
-    shadowRadius: 4, // Shadow blur radius
-    elevation: 5, // Shadow for Android
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  modalText: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  modalButtons: {
-    flexDirection: "row", // Arrange buttons horizontally
-    justifyContent: "space-around", // Space between buttons
-    width: "100%",
-  },
-  button: {
-    padding: 10,
-    borderRadius: 5,
-    minWidth: 80,
-    alignItems: "center",
-  },
-  buttonYes: {
-    backgroundColor: "#2196F3", // Blue for Yes
-  },
-  buttonNo: {
-    backgroundColor: "#FFA500", // Orange for No
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    borderRadius: 20,
-    padding: 5,
-  },
   billText: {
     fontSize: 12,
     color: "#FFFFFF",
     fontWeight: "bold",
     margin: 2,
+  },
+  scrollcontainer: {
+    margin: 16,
+    flexGrow: 1,
+    backgroundColor: "#F5F5DC",
+    padding: 8,
+    marginBottom: 80, // ✅ adds visible gap from bottom
+  },
+  progressContainer: {
+    width: "100%",
+    height: 20,
+    backgroundColor: "#eee",
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#6200ee",
+  },
+  progressText: {
+    textAlign: "center",
+    marginTop: 4,
+    fontSize: 12,
+    color: "#333",
   },
 });

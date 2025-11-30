@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   FlatList,
   StyleSheet,
   Modal,
+  TextInput,
 } from "react-native";
 import { AntDesign, MaterialIcons } from "@expo/vector-icons";
 
@@ -28,6 +29,26 @@ const DropdownMultiSelect: React.FC<DropdownMultiSelectProps> = ({
   placeholder = "Select...",
 }) => {
   const [isDropdownVisible, setDropdownVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter options based on search
+  const filteredOptions = useMemo(() => {
+    return options.filter((item) =>
+      item.label.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [options, searchQuery]);
+
+  const allSelected =
+    options.length > 0 && selectedValues.length === options.length;
+
+  // Handle Select All / Deselect All
+  const handleSelectAll = () => {
+    if (allSelected) {
+      onChange([]); // Deselect all
+    } else {
+      onChange(options.map((o) => o.value)); // Select all
+    }
+  };
 
   // toggle item selection
   const onSelect = useCallback(
@@ -66,14 +87,42 @@ const DropdownMultiSelect: React.FC<DropdownMultiSelectProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Search Bar */}
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search members..."
+              placeholderTextColor="#777"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+
+            {/* ✅ Select All Option */}
+            <TouchableOpacity
+              style={[styles.option, allSelected && styles.selectedOption]}
+              onPress={handleSelectAll}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  allSelected && styles.selectedOptionText,
+                ]}
+              >
+                {allSelected ? "Deselect All" : "Select All"}
+              </Text>
+              {allSelected && (
+                <AntDesign name="check" size={16} color="white" />
+              )}
+            </TouchableOpacity>
+
             <FlatList
-              data={options}
+              data={filteredOptions}
               keyExtractor={(item) => item.value}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
                     styles.option,
-                    selectedValues.includes(item.value) && styles.selectedOption,
+                    selectedValues.includes(item.value) &&
+                      styles.selectedOption,
                   ]}
                   onPress={() => onSelect(item)}
                 >
@@ -199,6 +248,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginRight: 6,
     fontSize: 13,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+    fontSize: 14,
+    color: "#333",
   },
 });
 

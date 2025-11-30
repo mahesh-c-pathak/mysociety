@@ -5,21 +5,23 @@ import { useNotification } from "@/context/NotificationContext";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
-
 export default function VisitorApprovalModal() {
   const { pendingVisitor, setPendingVisitor } = useNotification();
- 
-  
 
   if (!pendingVisitor) return null;
 
   const handleAction = async (status: "Approved" | "Rejected") => {
     try {
-      const { wing, floorName, flatNumber, visitorId, societyName } = pendingVisitor;
+      const { wing, floorName, flatNumber, visitorId, societyName } =
+        pendingVisitor;
       const customWingsSubcollectionName = `${societyName} wings`;
       const customFloorsSubcollectionName = `${societyName} floors`;
       const customFlatsSubcollectionName = `${societyName} flats`;
-      const customVisitorCollectionName = `visitor_${societyName}`;
+
+      // const customVisitorCollectionName = `visitor_${societyName}`;
+
+      const customVisitorCollectionName = "visitor";
+
       const visitorRef = doc(
         db,
         `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}/${customVisitorCollectionName}/${visitorId}`
@@ -33,9 +35,13 @@ export default function VisitorApprovalModal() {
 
   return (
     <Portal>
-      <Modal visible onDismiss={() => setPendingVisitor(null)} contentContainerStyle={styles.modalBox}>
+      <Modal
+        visible
+        onDismiss={() => setPendingVisitor(null)}
+        contentContainerStyle={styles.modalBox}
+      >
         <Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 20 }}>
-           Approve visitor for ?
+          Approve visitor for ?
         </Text>
         <View style={styles.actions}>
           <Button

@@ -38,7 +38,9 @@ const GatePassDetails = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customVisitorCollectionName = `visitor_${societyName}`;
+  // const customVisitorCollectionName = `visitor_${societyName}`;
+
+  const customVisitorCollectionName = "visitor";
 
   const [gatePassCheckInData, setGatePassCheckInData] = useState<any[]>([]);
 
@@ -59,6 +61,7 @@ const GatePassDetails = () => {
         // Firestore query to filter by uniqueId
         const q = query(
           visitorCollectionRef,
+          where("societyName", "==", societyName),
           where("uniqueId", "==", profileItem.uniqueId)
         );
         // Execute query

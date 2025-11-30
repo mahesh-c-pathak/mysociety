@@ -229,7 +229,7 @@ const AddScheduleBillItem = () => {
           }
         );
         Alert.alert("Success", "Bill item added successfully!", [
-          { text: "OK", onPress: () => router.replace("./specialBillitems") },
+          { text: "OK", onPress: () => router.replace("./ScheduleBillitems") },
         ]);
       }
     } catch (error) {

@@ -21,12 +21,14 @@ import PaymentDatePicker from "@/utils/paymentDate";
 import { MaterialIcons } from "@expo/vector-icons"; // Or use another icon library if needed
 
 import { useSociety } from "@/utils/SocietyContext";
-import { fetchMembersUpdated } from "@/utils/fetchMembersUpdated";
 
 import { billItemLedgerGroupList } from "@/components/LedgerGroupList"; // Import the array
 import { fetchAccountList } from "@/utils/acountFetcher";
 
 import { Button, Switch, Text, Divider, IconButton } from "react-native-paper";
+import { fetchSelectedWingData } from "@/utils/fetchSelectedWingData";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/firebaseConfig";
 
 // Define TypeScript type for a bill item
 interface BillItem {
@@ -91,7 +93,7 @@ const CreateScheduledBill = () => {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [dueDate, setDueDate] = useState<Date | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const [isEnablePenalty, setIsEnablePenalty] = useState(false);
   const [Occurance, setOccurance] = useState("");
@@ -113,11 +115,77 @@ const CreateScheduledBill = () => {
   const [ledgerAccountGroupPenalty, setLedgerAccountGroupPenalty] =
     useState<string>("");
 
-  const [fetchedmembers, setFetchedMembers] = useState<Member[]>([]);
+  const customWingsSubcollectionName = `${societyName} wings`;
 
-  const [selectedfetchedMembers, setSelectedFetchedMembers] = useState<
-    { floor: string; label: string; value: string }[]
-  >([]);
+  const [wings, setWings] = useState<{ label: string; value: string }[]>([]);
+
+  const [selectedWings, setSelectedWings] = useState<string[]>([]);
+  const [selectedWingsMembers, setselectedWingsMembers] = useState<Member[]>(
+    []
+  );
+
+  const [
+    formattedSelectedWingMembersData,
+    setFormattedSelectedWingMembersData,
+  ] = useState<string[]>([]);
+
+  useEffect(() => {
+    console.log(
+      "formattedSelectedWingMembersData",
+      formattedSelectedWingMembersData
+    );
+  }, [formattedSelectedWingMembersData]);
+
+  useEffect(() => {
+    // Format the data as desired
+    // const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
+    const newSelectedWingsMembersData = selectedWingsMembers.map((item) => {
+      const [wing, flatAndUserId] = item.value.split(" ");
+      const flatNumber = flatAndUserId.split("-")[0]; // extract only the flat number part (before userId)
+      return `${item.floor}-${wing}-${flatNumber}`;
+    });
+    // ✅ Remove duplicates using Set
+    const uniqueData = Array.from(new Set(newSelectedWingsMembersData));
+    setFormattedSelectedWingMembersData(uniqueData);
+  }, [selectedWingsMembers]);
+
+  useEffect(() => {
+    const loadWings = async () => {
+      const wingsRef = collection(
+        db,
+        "Societies",
+        societyName,
+        customWingsSubcollectionName
+      );
+      const snapshot = await getDocs(wingsRef);
+      const wingOptions = snapshot.docs.map((doc) => ({
+        label: doc.id,
+        value: doc.id,
+      }));
+      setWings(wingOptions);
+    };
+    loadWings();
+  }, [societyName]);
+
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!selectedWings.length) return;
+      const data = await fetchSelectedWingData(societyName, selectedWings);
+      // ✅ Filter out flats where flatType === "dead"
+      const activeFlats = data.filter(
+        (member) => !member.flatType || member.flatType.toLowerCase() !== "dead"
+      );
+
+      setselectedWingsMembers(activeFlats);
+
+      // Optional: Log how many were skipped
+      const skipped = data.length - activeFlats.length;
+      if (skipped > 0) {
+        console.log(`🟡 Skipped ${skipped} dead flats from selected wings`);
+      }
+    };
+    loadMembers();
+  }, [selectedWings]);
 
   // fetch Paid From List
   useEffect(() => {
@@ -136,39 +204,6 @@ const CreateScheduledBill = () => {
     };
     fetchOptions();
   }, [societyName]);
-
-  useEffect(() => {
-    const loadMembers = async () => {
-      try {
-        setLoading(true);
-        const fetchedMembers = await fetchMembersUpdated(societyName);
-        setFetchedMembers(fetchedMembers);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadMembers();
-  }, [societyName]);
-
-  const [formattedMembersData, setFormattedMembersData] = useState<string[]>(
-    []
-  );
-
-  useEffect(() => {
-    console.log("formattedMembersData", formattedMembersData);
-  }, [formattedMembersData]);
-
-  useEffect(() => {
-    // Format the data as desired
-    // const newData = selectedfetchedMembers.map((item) => `${item.floor} ${item.label}`);
-    const newData = selectedfetchedMembers.map(
-      (item) => `${item.floor}-${item.label.split(" ").join("-")}`
-    );
-    setFormattedMembersData(newData);
-  }, [selectedfetchedMembers]);
 
   const handleDateChange = (newDate: Date, type: string) => {
     if (type === "start") {
@@ -301,8 +336,8 @@ const CreateScheduledBill = () => {
       Alert.alert("Validation Error", "Please select a dueDate.");
       return;
     }
-    if (selectedfetchedMembers.length === 0) {
-      Alert.alert("Validation Error", "Please select at least one Member.");
+    if (formattedSelectedWingMembersData.length === 0) {
+      Alert.alert("Validation Error", "Please select at least one Wing.");
       return;
     }
     if (billItems.length === 0) {
@@ -318,7 +353,7 @@ const CreateScheduledBill = () => {
       startDate: startDate.toISOString().split("T")[0],
       endDate: endDate.toISOString().split("T")[0],
       dueDate: dueDate.toISOString().split("T")[0],
-      members: formattedMembersData.join(", "),
+      members: formattedSelectedWingMembersData.join(", "),
       items: JSON.stringify(billItems),
       isEnablePenalty: isEnablePenalty ? "true" : "false", // Convert boolean to string,
       Occurance,
@@ -338,6 +373,64 @@ const CreateScheduledBill = () => {
       params,
     });
   };
+
+  // Save Filled Form Data before going to Add Bill Item
+  const saveFormData = async () => {
+    const formData = {
+      name,
+      note,
+      balancesheet,
+      isAdvancePaymentSettelement,
+      startDate,
+      endDate,
+      dueDate,
+      Occurance,
+      recurringFrequency,
+      penaltyType,
+      fixPricePenalty,
+      percentPenalty,
+      ledgerAccountPenalty,
+      ledgerAccountGroupPenalty,
+      isEnablePenalty,
+      selectedWings,
+      billduration,
+      billdueduration,
+    };
+    await AsyncStorage.setItem("@scheduleBillForm", JSON.stringify(formData));
+  };
+
+  // restore Filled Form Data the data on mount using useEffect
+  useEffect(() => {
+    const loadFormData = async () => {
+      const saved = await AsyncStorage.getItem("@scheduleBillForm");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setName(parsed.name || "");
+        setNote(parsed.note || "");
+        setBalancesheet(parsed.balancesheet || "");
+        setisAdvancePaymentSettelement(
+          parsed.isAdvancePaymentSettelement || false
+        );
+        setStartDate(
+          parsed.startDate ? new Date(parsed.startDate) : new Date()
+        );
+        setEndDate(parsed.endDate ? new Date(parsed.endDate) : new Date());
+        setDueDate(parsed.dueDate ? new Date(parsed.dueDate) : new Date());
+        setOccurance(parsed.Occurance || "");
+        setRecurringFrequency(parsed.recurringFrequency || "");
+        setPenaltyType(parsed.penaltyType || "");
+        setfixPricePenalty(parsed.fixPricePenalty || "");
+        setPercentPenalty(parsed.percentPenalty || "");
+        setLedgerAccountPenalty(parsed.ledgerAccountPenalty || "");
+        setLedgerAccountGroupPenalty(parsed.ledgerAccountGroupPenalty || "");
+        setIsEnablePenalty(parsed.isEnablePenalty || false);
+        setSelectedWings(parsed.selectedWings || []);
+        setBillduration(parsed.billduration || "");
+        setBilldueduration(parsed.billdueduration || "");
+      }
+    };
+    loadFormData();
+  }, []);
 
   if (loading) {
     return (
@@ -442,26 +535,21 @@ const CreateScheduledBill = () => {
                 />
               </View>
 
-              {/* Select Members */}
+              {/* Select Wings */}
               <View style={styles.section}>
-                <Text style={styles.label}>Members</Text>
+                <Text style={styles.label}>Wings</Text>
                 <DropdownMultiSelect
-                  options={fetchedmembers}
-                  selectedValues={selectedfetchedMembers.map((m) => m.value)}
-                  onChange={(values) => {
-                    const selected = fetchedmembers.filter((m) =>
-                      values.includes(m.value)
-                    );
-                    setSelectedFetchedMembers(selected);
-                  }}
-                  placeholder="Select members"
+                  options={wings}
+                  selectedValues={selectedWings}
+                  onChange={setSelectedWings}
+                  placeholder="Select Wings"
                 />
               </View>
             </View>
 
             {/* Added Items to bill */}
 
-            {isEditMode && (
+            {billItems.length > 0 && (
               <View style={styles.cardview}>
                 <Text style={styles.sectionHeader}>Bill Items</Text>
                 <FlatList
@@ -537,10 +625,11 @@ const CreateScheduledBill = () => {
             {/* Buttons */}
 
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
                 if (!balancesheet) {
                   Alert.alert("Generate Bill", "Select Balancesheet");
                 } else {
+                  await saveFormData(); // 🟢 Save before navigating
                   // Navigate to the Items Page and pass balancesheet as a parameter
                   router.push({
                     pathname: "/admin/Bills/Maintenance/ScheduleBillitems", // Adjust this path based on your routing structure  specialBillitems
@@ -699,13 +788,6 @@ const CreateScheduledBill = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  sectiond: {
-    marginBottom: 20,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 10,
-    padding: 15,
-    elevation: 2,
-  },
   cardview: {
     marginBottom: 16,
     padding: 16,
@@ -727,16 +809,7 @@ const styles = StyleSheet.create({
   divider: {
     marginBottom: 10,
   },
-  input: {
-    marginBottom: 15,
-  },
-  dropdownContainer: {
-    marginBottom: 15,
-  },
-  addButton: {
-    marginTop: 10,
-    marginBottom: 15,
-  },
+
   listItem: {
     position: "relative",
     flexDirection: "row",
@@ -778,7 +851,7 @@ const styles = StyleSheet.create({
     flexShrink: 1, // Prevents text from pushing the switch
   },
   scrollContainer: { padding: 16, paddingBottom: 100 },
-  section: { marginBottom: 10 },
+  section: { marginBottom: 16 },
 
   addButtonNew: {
     backgroundColor: "#FFFFFF",
@@ -814,26 +887,6 @@ const styles = StyleSheet.create({
     minWidth: 100, // Ensures it doesn't shrink too much
     alignItems: "center", // Centers text inside
     marginLeft: 6,
-  },
-  selectedMembersContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 8,
-  },
-  memberChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#6200ee", // nice purple chip
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  memberText: {
-    color: "#fff",
-    marginRight: 6,
-    fontSize: 13,
   },
 });
 

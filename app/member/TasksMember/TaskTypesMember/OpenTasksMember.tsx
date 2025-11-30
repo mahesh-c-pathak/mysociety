@@ -28,8 +28,6 @@ const OpenTasksMember = () => {
   // const floorName = societyContext.floorName;
   const flatLabel = `${wing} ${flatNumber}`;
 
-  // const customComplainSubcollectionName = `${societyName} complains`;
-
   const customTasksCollectionName = `Tasks_${societyName}`;
 
   const [tasksData, setTasksData] = useState<any[]>([]);

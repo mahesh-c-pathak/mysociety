@@ -5,12 +5,19 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  StatusBar,
 } from "react-native";
-import { Appbar, IconButton, Card } from "react-native-paper";
+import { Appbar, IconButton, Card, Badge } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
 import { db } from "@/firebaseConfig";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
 import { useSociety } from "@/utils/SocietyContext";
 import { useAuthRole } from "@/lib/authRole";
 import { useNotification } from "@/context/NotificationContext"; // ✅ current token
@@ -53,6 +60,11 @@ const Index = () => {
     if (flatNumberParam) setFlatNumber(flatNumberParam as string);
     if (userTypeParam) setUserType(userTypeParam as string);
   }, [societyNameParam, wingParam, flatNumberParam, userTypeParam]);
+
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
+
+  const [unpaidCount, setUnpaidCount] = useState(0); // ✅ For badge
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -152,6 +164,21 @@ const Index = () => {
 
         await updateDoc(flatRef, { userDetails: updatedDetails });
 
+        // set unpaid bill count
+        const billsCollectionRef = collection(
+          flatRef,
+          customFlatsBillsSubcollectionName
+        );
+        const billsSnapshot = await getDocs(billsCollectionRef);
+
+        let unpaid = 0;
+        billsSnapshot.forEach((billDoc) => {
+          const bill = billDoc.data();
+          if (bill.status !== "paid") unpaid++;
+        });
+
+        setUnpaidCount(unpaid);
+
         console.log("✅ Tokens synced to Firestore:", {
           expoPushToken,
           nativeToken,
@@ -170,6 +197,7 @@ const Index = () => {
     flatNumber,
     expoPushToken,
     nativeToken,
+    customFlatsBillsSubcollectionName,
   ]);
 
   const quickAccess = [
@@ -177,9 +205,10 @@ const Index = () => {
       label: "My Bills",
       icon: "file-document",
       route: "/member/myBill?source=Member",
+      showBadge: true, // ✅ mark the one that needs badge
     },
-    { label: "Member Dues", icon: "cart" },
-    { label: "user FUnds", icon: "book-account", route: "/(accounting)" },
+    // { label: "Member Dues", icon: "cart" },
+    // { label: "user FUnds", icon: "book-account", route: "/(accounting)" },
     {
       label: "Complains",
       icon: "note-edit",
@@ -203,22 +232,22 @@ const Index = () => {
   ];
 
   const interactionItems = [
-    { label: "Meeting", icon: "calendar-clock", permission: "Society Meeting" },
+    // { label: "Meeting", icon: "calendar-clock", permission: "Society Meeting" },
     {
       label: "Announcements",
       icon: "bullhorn",
-      permission: "Announcements",
+      // permission: "Announcements",
       route: "/(AnnouncementsMember)?source=Member",
     },
-    { label: "Event", icon: "calendar", permission: "Event" },
-    { label: "Voting", icon: "thumb-up", permission: "Voting" },
+    // { label: "Event", icon: "calendar", permission: "Event" },
+    // { label: "Voting", icon: "thumb-up", permission: "Voting" },
     {
       label: "Society Resources",
       icon: "file",
       permission: "Society Resources",
     },
-    { label: "Proposal", icon: "book-open-outline", permission: "Proposal" },
-    { label: "Suggestions", icon: "lightbulb", permission: "Suggestion" },
+    // { label: "Proposal", icon: "book-open-outline", permission: "Proposal" },
+    // { label: "Suggestions", icon: "lightbulb", permission: "Suggestion" },
     {
       label: "Tasks",
       icon: "clipboard-check",
@@ -250,7 +279,7 @@ const Index = () => {
   // Conditionally render "Tasks" card if permission exists
   const renderGrid = (items: any) => (
     <View style={styles.grid}>
-      {items.map((item, index) => {
+      {items.map((item: any, index: any) => {
         if (item.permission && !permissions.includes(item.permission)) {
           return null;
         }
@@ -265,7 +294,13 @@ const Index = () => {
               }
             }}
           >
-            <IconButton icon={item.icon} size={30} />
+            <View>
+              <IconButton icon={item.icon} size={30} />
+              {/* ✅ Badge on My Bills */}
+              {item.showBadge && unpaidCount > 0 && (
+                <Badge style={styles.badge}>{unpaidCount}</Badge>
+              )}
+            </View>
             <Text style={styles.gridLabel}>{item.label}</Text>
           </TouchableOpacity>
         );
@@ -276,14 +311,17 @@ const Index = () => {
   return (
     <View style={styles.container}>
       {/* Top Appbar */}
-      <Appbar.Header>
-        <Appbar.Action icon="menu" onPress={() => {}} />
+      <StatusBar backgroundColor="#2196F3" barStyle="light-content" />
+
+      <Appbar.Header style={[styles.header, { backgroundColor: "#2196F3" }]}>
+        <Appbar.Action icon="menu" onPress={() => {}} color="#fff" />
         <Appbar.Content
           title={`${wing || "-"} ${floorName || "-"} Flat: ${
             flatNumber || "-"
           }`}
+          titleStyle={styles.titleStyle}
         />
-        <IconButton icon="bell" onPress={() => {}} />
+        <Appbar.Action icon="bell" onPress={() => {}} color="#fff" />
       </Appbar.Header>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Quick Access Section */}
@@ -321,6 +359,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f9fa",
   },
+  header: { backgroundColor: "#2196F3" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
   scrollContent: {
     padding: 16,
   },
@@ -349,5 +389,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     marginVertical: 8,
+  },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: "red",
+    color: "white",
   },
 });

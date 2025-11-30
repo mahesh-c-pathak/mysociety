@@ -3,20 +3,30 @@ import React, { useState, useEffect } from "react";
 // import { Dropdown } from 'react-native-paper-dropdown';
 import { collection, doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
-import { Appbar, Button, Switch } from "react-native-paper";
+import { Button, Switch } from "react-native-paper";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 
-import { useSociety } from "../../../utils/SocietyContext";
+import { useSociety } from "@/utils/SocietyContext";
 
-import { GenerateVoucherNumber } from "../../../utils/generateVoucherNumber";
-import { updateLedger } from "../../../utils/updateLedger";
-import { getBillItemsLedger } from "../../../utils/getBillItemsLedger";
+import { GenerateVoucherNumber } from "@/utils/generateVoucherNumber";
+import { updateLedger } from "@/utils/updateLedger";
+import { getBillItemsLedger } from "@/utils/getBillItemsLedger";
 import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
 import PaymentDatePicker from "@/utils/paymentDate";
 import CustomInput from "@/components/CustomInput";
 
 import Dropdown from "@/utils/DropDown";
 import { updateFlatCurrentBalance } from "@/utils/updateFlatCurrentBalance"; // Adjust path as needed
+import { sendInAppMessage } from "@/utils/sendInAppMessage";
+import LoadingIndicator from "@/components/LoadingIndicator"; // new import
+import AppbarComponent from "@/components/AppbarComponent";
+
+type LedgerOp = {
+  group: string;
+  account: string;
+  amount: number;
+  type: "Add" | "Subtract";
+};
 
 const AcceptReceipt = () => {
   const router = useRouter();
@@ -34,6 +44,7 @@ const AcceptReceipt = () => {
     chequeNo,
     selectedBillsProperties,
     privateFilePath,
+    userIds,
   } = useLocalSearchParams();
 
   const params = useLocalSearchParams();
@@ -49,22 +60,28 @@ const AcceptReceipt = () => {
   const [groupTo, setGroupTo] = useState<string>("");
 
   const [asOnDate, setAsOnDate] = useState<Date>(new Date());
+  const [loading, setLoading] = useState(false);
 
   const parsedselectedBillsProperties =
     typeof selectedBillsProperties === "string"
       ? JSON.parse(selectedBillsProperties)
       : selectedBillsProperties;
 
+  const parsedUserIds =
+    typeof userIds === "string" ? JSON.parse(userIds) : userIds || [];
+
+  console.log("parsedUserIds", parsedUserIds);
+
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
-  useEffect(() => {
-    console.log("parsedselectedBillsProperties", parsedselectedBillsProperties);
-  }, [parsedselectedBillsProperties]);
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   // fetch Paid To List
   useEffect(() => {
@@ -73,12 +90,16 @@ const AcceptReceipt = () => {
         const { accountFromOptions } =
           await fetchbankCashAccountOptions(societyName);
         setAccountToOptions(accountFromOptions);
-      } catch (error) {
-        Alert.alert("Error", "Failed to fetch bank Cash account options.");
+      } catch (err) {
+        const error = err as Error;
+        Alert.alert(
+          "Error",
+          error.message || "Failed to fetch bank Cash account options."
+        );
       }
     };
     fetchbankCashOptions();
-  }, [params?.id]);
+  }, [params.id, societyName]);
 
   // Payment Date State
 
@@ -109,6 +130,7 @@ const AcceptReceipt = () => {
         Alert.alert("Error", "Please select a ledger account.");
         return;
       }
+      setLoading(true);
 
       // Parse and validate receiptAmount
       const receiptAmountValue = parseFloat(receiptAmount as string);
@@ -122,15 +144,6 @@ const AcceptReceipt = () => {
 
       const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
       const flatDocRef = doc(db, flatRef);
-      const flatDocSnap = await getDoc(flatDocRef);
-
-      if (!flatDocSnap.exists()) {
-        console.warn(`Flat Data Not Exisits.`);
-        return;
-      }
-
-      const flatDetails = flatDocSnap.data();
-      const residentType = flatDetails.resident;
 
       const billsCollectionRef = collection(
         flatDocRef,
@@ -139,6 +152,9 @@ const AcceptReceipt = () => {
       const parsedSelectedIds = selectedIds
         ? JSON.parse(selectedIds as string)
         : [];
+
+      // 🔥 NEW: Ledger queue — all updates stored here
+      const ledgerOps: LedgerOp[] = [];
 
       if (Array.isArray(parsedSelectedIds) && parsedSelectedIds.length > 0) {
         let remainingReceiptValue = receiptAmountValue; // Track remaining receiptAmount globally
@@ -153,11 +169,18 @@ const AcceptReceipt = () => {
             console.log("Bill Document:", billDoc.data());
             const billData = billDoc.data();
 
+            const isEnablePenalty = billData.isEnablePenalty;
+
+            const billTotals = billData.billItemTotals || {};
+
             let balanceToApply = Math.min(
               billData.amount,
               remainingReceiptValue
             );
             let totalReceiptAmount = balanceToApply; // Track total receipt amount per bill
+
+            // get master bill id
+            let masterBillId = "";
 
             // Check for penalty details if available
             let penaltyUpdate = {};
@@ -166,30 +189,44 @@ const AcceptReceipt = () => {
             );
 
             if (selectedBill) {
-              penaltyUpdate = {
-                overdueDays: selectedBill.overdueDays,
-                penaltyAmount: selectedBill.penaltyAmount,
-                ledgerAccountPenalty: selectedBill.ledgerAccountPenalty,
-                ledgerAccountGroupPenalty:
-                  selectedBill.ledgerAccountGroupPenalty,
-              };
+              if (isEnablePenalty === true) {
+                penaltyUpdate = {
+                  overdueDays: selectedBill.overdueDays ?? null,
+                  penaltyAmount: selectedBill.penaltyAmount ?? 0,
+                  ledgerAccountPenalty:
+                    selectedBill.ledgerAccountPenalty ?? null,
+                  ledgerAccountGroupPenalty:
+                    selectedBill.ledgerAccountGroupPenalty ?? null,
+                };
 
-              // Deduct penalty amount from remaining receipt value
-              remainingReceiptValue -= selectedBill.penaltyAmount;
+                // Deduct penalty amount from remaining receipt value
+                remainingReceiptValue -= selectedBill.penaltyAmount;
 
-              // Include penaltyAmount in total receiptAmount
-              totalReceiptAmount += selectedBill.penaltyAmount;
+                // Include penaltyAmount in total receiptAmount
+                totalReceiptAmount += selectedBill.penaltyAmount;
 
-              const ledgerUpdate = await updateLedger(
-                societyName,
-                selectedBill.ledgerAccountGroupPenalty,
-                selectedBill.ledgerAccountPenalty,
-                selectedBill.penaltyAmount,
-                "Add",
-                formattedDate
-              );
-              console.log(` Penalty Ledger Update Status: ${ledgerUpdate}`);
-            }
+                // 🔥 Queue penalty ledger update instead of awaiting
+
+                if (
+                  selectedBill.ledgerAccountGroupPenalty &&
+                  selectedBill.ledgerAccountPenalty &&
+                  selectedBill.penaltyAmount > 0
+                ) {
+                  ledgerOps.push({
+                    group: selectedBill.ledgerAccountGroupPenalty,
+                    account: selectedBill.ledgerAccountPenalty,
+                    amount: selectedBill.penaltyAmount,
+                    type: "Add",
+                  });
+                } else {
+                  console.warn(
+                    "Skipping penalty ledger update — missing ledger accounts"
+                  );
+                }
+              }
+
+              masterBillId = selectedBill.masterBillId;
+            } // end if selectedBill
 
             // Ensure remainingReceiptValue is not negative
             remainingReceiptValue = Math.max(remainingReceiptValue, 0);
@@ -223,36 +260,47 @@ const AcceptReceipt = () => {
             });
 
             console.log(`Updated bill document with ID: ${item}`);
+
+            // update master bill
+
+            const mainBillRef = `Bills/${masterBillId}`;
+            const mainBillDocRef = doc(db, mainBillRef);
+            const mainBillsSnapshot = await getDoc(mainBillDocRef);
+            if (!mainBillsSnapshot.exists()) {
+              console.warn("mainBillDocSnap does not exist.");
+              return;
+            }
+            const mainBillData = mainBillsSnapshot.data();
+            const { totalPaidAmount } = mainBillData;
+            const updatedTotalPaidAmount = totalPaidAmount + balanceToApply;
+
+            await updateDoc(mainBillDocRef, {
+              totalPaidAmount: updatedTotalPaidAmount,
+            });
+
+            console.log("Master bill updated after removing this flat.");
+
             // Mahesh Entered
 
-            // Call the function to get bill details
-            const billItemLedger = await getBillItemsLedger(
-              societyName,
-              item,
-              residentType
-            );
+            for (const key in billTotals) {
+              const [ledgerGroup, ledgerAccount] = key.split("||");
+              const amount = billTotals[key];
+              const ledgerAccountReceivables = `${ledgerAccount} Receivables`;
 
-            // Process each item: log details and update ledger
-            for (const { updatedLedgerAccount, amount } of billItemLedger) {
-              // Update ledger
-              const ledgerUpdate = await updateLedger(
-                societyName,
-                "Account Receivable",
-                updatedLedgerAccount,
+              // 🔥 Queue Reverse Account Receivable update instead of awaiting
+              ledgerOps.push({
+                group: "Account Receivable",
+                account: ledgerAccountReceivables,
                 amount,
-                "Subtract",
-                formattedDate
-              );
-              console.log(
-                ` Account Receivable Ledger Update Status: ${ledgerUpdate}`
-              );
+                type: "Subtract",
+              });
             }
 
             // Mahesh
           } else {
             console.log(`Bill document with ID: ${item} does not exist`);
           }
-        }
+        } // end for loop const item of parsedSelectedIds
 
         // If all bills are cleared, update uncleared balance status to "Cleared"
         if (remainingReceiptValue === 0) {
@@ -266,6 +314,7 @@ const AcceptReceipt = () => {
 
           if (docSnap.exists()) {
             await updateDoc(unclearedBalanceDocRef, {
+              societyName: societyName,
               status: "Cleared",
               amountReceived: receiptAmountValue,
               paymentReceivedDate: formattedDate, // Save formatted date,
@@ -286,24 +335,13 @@ const AcceptReceipt = () => {
           }
         }
 
-        const LedgerUpdate = await updateLedger(
-          societyName,
-          groupTo,
-          ledgerAccount,
-          parseFloat(receiptAmount as string),
-          "Add",
-          formattedDate
-        ); // Update Ledger
+        // 🔥 Queue groupTo ledgerAccount update instead of awaiting
 
-        console.log("Bill Receipt Final ledger update ", LedgerUpdate);
-        Alert.alert("Success", "Receipt processed successfully.");
-        router.replace({
-          pathname: "/admin/Collection/FlatCollectionSummary",
-          params: {
-            wing: wing,
-            floorName: floorName,
-            flatNumber: flatNumber,
-          },
+        ledgerOps.push({
+          group: groupTo,
+          account: ledgerAccount,
+          amount: parseFloat(receiptAmount as string),
+          type: "Add",
         });
       } else {
         console.log(
@@ -325,6 +363,7 @@ const AcceptReceipt = () => {
 
           if (docSnap.exists()) {
             await updateDoc(unclearedBalanceDocRef, {
+              societyName: societyName,
               status: "Cleared",
               amountReceived: receiptValue,
               paymentReceivedDate: formattedDate, // Save formatted date,
@@ -341,7 +380,8 @@ const AcceptReceipt = () => {
           // Logic to save Advance Entry and Update Current Balance for the Flat
 
           try {
-            const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+            // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+            const currentBalanceSubcollectionName = "flatCurrentBalance";
             const currentbalanceCollectionRef = collection(
               db,
               flatRef,
@@ -352,7 +392,8 @@ const AcceptReceipt = () => {
               currentbalanceCollectionRef,
               parseFloat(receiptAmount as string),
               "Add",
-              formattedDate
+              formattedDate,
+              societyName
             );
 
             console.log("Balance update result:", result);
@@ -360,56 +401,103 @@ const AcceptReceipt = () => {
             console.error("Failed to update balance:", error);
           }
 
-          // Update Ledger
-          const LedgerUpdate = await updateLedger(
-            societyName,
-            groupTo,
-            ledgerAccount,
-            parseFloat(receiptAmount as string),
-            "Add",
-            formattedDate
-          ); // Update Ledger
-          console.log(LedgerUpdate);
-          const LedgerUpdate2 = await updateLedger(
-            societyName,
-            "Current Liabilities",
-            "Members Advanced",
-            parseFloat(amount as string),
-            "Add",
-            formattedDate
-          ); // Update Ledger
-          console.log(LedgerUpdate2);
+          // 🔥 Queue groupTo ledgerAccount update instead of awaiting
+
+          ledgerOps.push({
+            group: groupTo,
+            account: ledgerAccount,
+            amount: receiptValue,
+            type: "Add",
+          });
+
+          // 🔥 Queue Members Advanced ledgerAccount update instead of awaiting
+
+          ledgerOps.push({
+            group: "Current Liabilities",
+            account: "Members Advanced",
+            amount: receiptValue,
+            type: "Add",
+          });
         } else {
           console.error(
             "Invalid receiptAmount, unable to update currentBalance."
           );
           return;
         }
-        Alert.alert("Success", "Receipt processed successfully.");
-        router.replace({
-          pathname: "/admin/Collection/FlatCollectionSummary",
-          params: {
-            wing: wing,
-            floorName: floorName,
-            flatNumber: flatNumber,
-          },
-        });
+      } // end else
+
+      // -------------------------------------------------------
+      // 🔥🔥 EXECUTE ALL LEDGER UPDATES IN PARALLEL 🔥🔥
+      // -------------------------------------------------------
+      await Promise.all(
+        ledgerOps.map((op) =>
+          updateLedger(
+            societyName,
+            op.group,
+            op.account,
+            op.amount,
+            op.type,
+            formattedDate
+          )
+        )
+      );
+
+      // 🔹 Send In-App Message to all users of that flat
+      if (parsedUserIds.length > 0) {
+        const title = `Receipt Accepted`;
+        const body = `Your payment receipt for ₹${receiptAmount} has been accepted`;
+        console.log("Sending in-app messages to:", parsedUserIds);
+
+        await Promise.all(
+          parsedUserIds.map((uid: string) =>
+            sendInAppMessage(
+              societyName as string,
+              uid,
+              title,
+              body,
+              "receipt_accepted",
+              `/member/myBill/Wallet` // 🔹 optional path
+            )
+          )
+        );
+
+        console.log("In-app messages sent successfully");
       }
+
+      Alert.alert("Success", "Receipt processed successfully.", [
+        {
+          text: "OK",
+          onPress: () => {
+            router.replace({
+              pathname: "/admin/Collection/FlatCollectionSummary",
+              params: {
+                wing: wing,
+                floorName: floorName,
+                flatNumber: flatNumber,
+              },
+            });
+          },
+        },
+      ]);
     } catch (error) {
       console.error("Error in handleAccept:", error);
       Alert.alert("Error", "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
+
+  if (loading) {
+    return <LoadingIndicator />;
+  }
 
   return (
     <View style={styles.container}>
       {/* Remove Stack Header */}
       <Stack.Screen options={{ headerShown: false }} />
       {/* Appbar Header */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} />
-        <Appbar.Content title="Accept Receipt" />
-      </Appbar.Header>
+
+      <AppbarComponent title="Accept Receipt" source="Admin" />
 
       <View style={styles.modalContainer}>
         {/* Receipt Amount */}
@@ -491,30 +579,15 @@ export default AcceptReceipt;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2196F3" },
   section: { marginBottom: 10 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#CCC",
-    borderRadius: 4,
-    padding: 10,
-    marginVertical: 8,
-  },
+
   modalContainer: {
     backgroundColor: "#FFF",
     width: "90%",
     borderRadius: 8,
     padding: 16,
   },
-  dateInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 8,
-  },
-  dateInput: { flex: 1, borderBottomWidth: 1, paddingVertical: 8 },
-  calendarIcon: { fontSize: 20, marginLeft: 8 },
-  noteInput: { height: 80, textAlignVertical: "top" },
   switchContainer: {
     flexDirection: "row",
     justifyContent: "space-between",

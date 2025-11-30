@@ -20,16 +20,15 @@ import paymentModeOptions from "@/constants/paymentModeOptions";
 
 import DropdownMultiSelect from "@/utils/DropdownMultiSelect";
 import { fetchMembersUpdated, Member } from "@/utils/fetchMembersUpdated";
-import {
-  getDocs,
-  collectionGroup,
-} from "firebase/firestore";
+import { getDocs, collectionGroup, query, where } from "firebase/firestore";
 
 import AppbarComponent from "@/components/AppbarComponent";
 import AppbarMenuComponent from "@/components/AppbarMenuComponent";
+import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
 
 const ReceiptSummary = () => {
   const router = useRouter();
+  useCustomBackHandler("/admin/Accounting/Reports");
   const { societyName } = useSociety();
   const [unclearedBalance, setUnclearedBalance] = useState<any[]>([]);
   const [originalBalance, setOriginalBalance] = useState<any[]>([]);
@@ -49,27 +48,28 @@ const ReceiptSummary = () => {
 
   const [loading, setLoading] = useState(false);
 
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
 
-
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   useEffect(() => {
-  const getMembers = async () => {
-    setLoading(true);
-    try {
-      const membersData = await fetchMembersUpdated(societyName);
-      setMembers(membersData);
-    } catch (error) {
-      Alert.alert("Error", "Failed to fetch members.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const getMembers = async () => {
+      setLoading(true);
+      try {
+        const membersData = await fetchMembersUpdated(societyName);
+        setMembers(membersData);
+      } catch (error) {
+        console.log("error", error);
+        Alert.alert("Error", "Failed to fetch members.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (societyName) {
-    getMembers();
-  }
-}, [societyName]);
+    if (societyName) {
+      getMembers();
+    }
+  }, [societyName]);
 
   // Get the current date and set it to the 1st of the current month
   const getFirstDayOfMonth = () => {
@@ -97,15 +97,15 @@ const ReceiptSummary = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const { accountFromOptions } = await fetchbankCashAccountOptions(
-          societyName
-        );
+        const { accountFromOptions } =
+          await fetchbankCashAccountOptions(societyName);
         accountFromOptions.push({ label: "All", value: "All", group: "All" });
         // Sort alphabetically by the `label` field
         accountFromOptions.sort((a, b) => a.label.localeCompare(b.label));
         // Update the state with the sorted options
         setLedgerOptions(accountFromOptions);
       } catch (error) {
+        console.log("error", error);
         Alert.alert("Error", "Failed to fetch account options.");
       }
     };
@@ -115,8 +115,13 @@ const ReceiptSummary = () => {
 
   const fetchUnclearedBalance = async () => {
     try {
+      const unclearedBalanceQuery = query(
+        collectionGroup(db, unclearedBalanceSubcollectionName),
+        where("societyName", "==", societyName),
+        where("status", "==", "Cleared") // ✅ Only fetch docs with status = "Cleared"
+      );
       const unclearedBalanceQuerySnapshot = await getDocs(
-        collectionGroup(db, unclearedBalanceSubcollectionName)
+        unclearedBalanceQuery
       );
 
       const unclearedBalanceList: any[] = [];
@@ -146,12 +151,15 @@ const ReceiptSummary = () => {
           selectedIds: unclearedBalanceData.selectedIds ?? [], // Default to an empty array if undefined,
           transactionId: unclearedBalanceId,
           selectedBills: unclearedBalanceData.selectedBills ?? [],
+          status: unclearedBalanceData.status,
         });
 
         setUnclearedBalance(unclearedBalanceList);
         setOriginalBalance(unclearedBalanceList);
       });
-    } catch (error) {}
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   useEffect(() => {
@@ -248,6 +256,7 @@ const ReceiptSummary = () => {
             <Text style={styles.summaryText}>Ledger Account: {ledger}</Text>
           </View>
         </TouchableOpacity>
+        <Divider />
 
         {/* Totals */}
         <View style={styles.totalsContainer}>
@@ -276,6 +285,7 @@ const ReceiptSummary = () => {
             </Card.Content>
           </Card>
         </View>
+        <Divider />
 
         {/* Receipt List */}
         <FlatList
@@ -311,18 +321,24 @@ const ReceiptSummary = () => {
             >
               <Card.Content>
                 <Text style={styles.receiptId}>{item.voucherNumber}</Text>
-                <Text>
-                  Received From: {item.wing} {item.flatNumber}
-                </Text>
-                <Text>Ledger Name: {item.ledgerAccount}</Text>
-                <Text>Payment Mode: {item.paymentMode}</Text>
-                {item.bankName && <Text>Bank Name: {item.bankName}</Text>}
-                {item.chequeNo && <Text>Cheque No: {item.chequeNo}</Text>}
-                <View style={styles.receiptFooter}>
-                  <Text style={styles.receiptAmount}>
-                    ₹ {parseFloat(item.amount).toFixed(2)}
-                  </Text>
-                  <Text style={styles.receiptDate}>{item.paymentDate}</Text>
+
+                <View style={styles.transactioncontent}>
+                  <View style={styles.transactionLeft}>
+                    <Text>
+                      Received From: {item.wing} {item.flatNumber}
+                    </Text>
+                    <Text>{item.status}</Text>
+                    <Text>Ledger Name: {item.ledgerAccount}</Text>
+                    <Text>Payment Mode: {item.paymentMode}</Text>
+                    {item.bankName && <Text>Bank Name: {item.bankName}</Text>}
+                    {item.chequeNo && <Text>Cheque No: {item.chequeNo}</Text>}
+                  </View>
+                  <View style={styles.transactionRight}>
+                    <Text style={styles.receiptAmount}>
+                      ₹ {parseFloat(item.amount).toFixed(2)}
+                    </Text>
+                    <Text style={styles.receiptDate}>{item.paymentDate}</Text>
+                  </View>
                 </View>
               </Card.Content>
             </Card>
@@ -360,10 +376,10 @@ const ReceiptSummary = () => {
               <View style={styles.section}>
                 <Text style={styles.label}>Members</Text>
                 <DropdownMultiSelect
-                  options={members}  
+                  options={members}
                   onChange={setSelectedMembers}
                   placeholder="Select Members"
-                  selectedValues={selectedMembers} 
+                  selectedValues={selectedMembers}
                 />
               </View>
 
@@ -406,7 +422,6 @@ export default ReceiptSummary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  header: { backgroundColor: "#6200ee" },
   summaryHeader: { padding: 16 },
   summaryText: { fontSize: 14, color: "#666" },
   totalsContainer: {
@@ -424,19 +439,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   receiptId: { fontWeight: "bold", marginBottom: 4 },
-  receiptFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
   receiptAmount: { fontSize: 16, fontWeight: "bold", color: "#4CAF50" },
   receiptDate: { fontSize: 12, color: "#666" },
   listContent: { paddingBottom: 16 },
-  titleStyle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
+
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -451,10 +457,18 @@ const styles = StyleSheet.create({
   section: { marginBottom: 16 },
   label: { fontSize: 14, fontWeight: "bold", marginBottom: 6 },
   applyButton: { marginTop: 20 },
-  datesContainer: {
+
+  transactioncontent: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    padding: 10,
+  },
+  transactionLeft: {
+    flex: 3,
+    justifyContent: "flex-start",
+  },
+  transactionRight: {
+    flex: 2,
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
 });

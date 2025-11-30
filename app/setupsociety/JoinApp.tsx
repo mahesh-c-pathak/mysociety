@@ -1,33 +1,33 @@
 // app/building-maintenance.tsx
-import React, { useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Appbar} from "react-native-paper";
-import { useNavigation } from "@react-navigation/native";
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+} from "react-native";
+import { useRouter } from "expo-router";
+
+import AppbarComponent from "@/components/AppbarComponent";
+import { globalStyles } from "@/styles/globalStyles";
 
 const JoinApp = () => {
   const router = useRouter();
-  const navigation = useNavigation();
+
   const { height } = useWindowDimensions();
   // Dynamically calculate spacing
   const spacing = height * 0.1; // 5% of screen height
-  useEffect(() => {
-      // Dynamically hide the header for this screen
-      navigation.setOptions({ headerShown: false });
-    }, [navigation]);
 
   return (
-    <View style={styles.container}>
-        {/* Top Appbar */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content
-            title="Join App"
-            titleStyle={styles.titleStyle}
-        />
-      </Appbar.Header>
-      
-      <View style={[styles.card, {marginTop:spacing, marginBottom: spacing }]}>
+    <View style={globalStyles.container}>
+      {/* Top Appbar */}
+
+      <AppbarComponent title="Join App" />
+
+      <View
+        style={[styles.card, { marginTop: spacing, marginBottom: spacing }]}
+      >
         <Text style={styles.description}>
           Obtain your joining code from the building administrator. Click Join
           Building, select your block, and effortlessly connect with your
@@ -35,8 +35,7 @@ const JoinApp = () => {
         </Text>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => router.push('/setupsociety/joinbuilding')}
-          
+          onPress={() => router.push("/setupsociety/joinbuilding")}
         >
           <Text style={styles.buttonText}>Join your Building</Text>
         </TouchableOpacity>
@@ -51,7 +50,7 @@ const JoinApp = () => {
         </Text>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => router.push('/setupsociety/requesttrial')}
+          onPress={() => router.push("/setupsociety/requesttrial")}
         >
           <Text style={styles.buttonText}>Create New Building</Text>
         </TouchableOpacity>
@@ -63,28 +62,12 @@ const JoinApp = () => {
 export default JoinApp;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: "#0288d1", // Match background color from the attached image
-    elevation: 4,
-  },
-  titleStyle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  centerTitle: {
-    alignItems: "center", // Center-align title
-  },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
@@ -92,18 +75,18 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    color: '#555',
+    color: "#555",
     marginBottom: 16,
   },
   button: {
-    backgroundColor: '#007bff',
+    backgroundColor: "#007bff",
     paddingVertical: 12,
     borderRadius: 6,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });

@@ -20,7 +20,7 @@ import {
   updateDoc,
   getDoc,
 } from "firebase/firestore";
-import { db,auth } from "@/firebaseConfig";
+import { db, auth } from "@/firebaseConfig";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { useSociety } from "@/utils/SocietyContext";
 import CustomInput from "@/components/CustomInput";
@@ -31,13 +31,10 @@ import CircularImagePicker from "@/components/CircularImagePicker";
 import GetUserToken from "@/utils/GetUserToken"; // Import the function
 import UploaFiles from "@/utils/UploaFiles"; // Import the function
 
-
-
 const AddGateKeeperA = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { societyName } = useSociety();
-  
 
   const [selectedImage, setSelectedImage] = useState<string | undefined>(
     undefined
@@ -360,16 +357,11 @@ const AddGateKeeperA = () => {
         <View style={{ minHeight: 70 }}></View>
       </ScrollView>
       {/* Save Button */}
-      <View
-        style={[
-          styles.footer,
-          { bottom: insets.bottom },
-        ]}
-      >
-      <CustomButton
-        onPress={isEditMode ? handleUpdate : handleSave}
-        title={isEditMode ? "Update" : "Save"}
-      />
+      <View style={[styles.footer, { bottom: insets.bottom }]}>
+        <CustomButton
+          onPress={isEditMode ? handleUpdate : handleSave}
+          title={isEditMode ? "Update" : "Save"}
+        />
       </View>
     </View>
   );
@@ -411,10 +403,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   footer: {
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,   // 👈 ensures it's always visible at bottom
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0, // 👈 ensures it's always visible at bottom
     backgroundColor: "#fff",
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,

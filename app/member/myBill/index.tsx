@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, FlatList, TouchableOpacity } from "react-native";
 import {
-  Appbar,
   Button,
   Card,
   Text,
@@ -26,6 +25,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { calculatePenaltyNew } from "@/utils/calculatePenaltyNew";
 import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
+import AppbarComponent from "@/components/AppbarComponent";
+import { getFlatCurrentBalance } from "@/utils/getFlatCurrentBalance";
 
 interface BillsData {
   id: string;
@@ -48,6 +49,7 @@ interface BillsData {
   penaltyAmount?: number;
   amountToPay?: number;
   receiptAmount?: number;
+  masterBillId: string;
 }
 
 const Index = () => {
@@ -78,10 +80,17 @@ const Index = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
-  const specialBillCollectionName = `specialBills_${societyName}`;
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
+
+  const dateString = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  //const specialBillCollectionName = `specialBills_${societyName}`;
   const flatRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}`;
 
   useEffect(() => {
@@ -102,18 +111,10 @@ const Index = () => {
         customFlatsBillsSubcollectionName
       );
 
-      const dateString = new Date().toISOString().split("T")[0];
-      const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
-      const currentBalanceSubcollection = collection(
-        flatDocRef,
-        currentBalanceSubcollectionName
-      );
-      const currentBalancequery = query(
-        currentBalanceSubcollection,
-        where("date", "<=", dateString),
-        orderBy("date", "desc"),
-        limit(1)
-      );
+      // const dateString = new Date().toISOString().split("T")[0];
+
+      // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+      // const currentBalanceSubcollectionName = "flatCurrentBalance";
 
       const depositSubcollectionName = `deposit_${flatNumber}`;
       const depositCollection = collection(
@@ -128,18 +129,16 @@ const Index = () => {
       );
 
       // Fetch both collections in parallel
-      const [flatbillCollection, currentBalancesnapshot, depositsnapshot] =
-        await Promise.all([
-          getDocs(billsCollectionRef),
-          getDocs(currentBalancequery),
-          getDocs(depositQuery),
-        ]);
+      const [flatbillCollection, depositsnapshot] = await Promise.all([
+        getDocs(billsCollectionRef),
+
+        getDocs(depositQuery),
+      ]);
 
       // set current balance
-      if (!currentBalancesnapshot.empty) {
-        const data = currentBalancesnapshot.docs[0].data();
-        setCurrentBalance(data.cumulativeBalance); // Use cumulativeBalance or default to 0
-      }
+      // Read current balance (read only; safe in parallel)
+      const currentFlatBalanceValue = await getFlatCurrentBalance(flatRef);
+      setCurrentBalance(currentFlatBalanceValue);
 
       // set Deposit
       if (!depositsnapshot.empty) {
@@ -152,6 +151,7 @@ const Index = () => {
         const billData = billDoc.data();
         const billStatus = billData.status;
         const billAmount = billData.amount || 0;
+        const masterBillId = billData.masterBillId;
 
         // Construct bill object
         const billObject: BillsData = {
@@ -164,10 +164,11 @@ const Index = () => {
           ),
           amount: billAmount,
           status: billStatus,
+          masterBillId,
         };
 
         if (billStatus !== "paid") {
-          const billRef = `Societies/${societyName}/${specialBillCollectionName}/${billDoc.id}`;
+          const billRef = `Bills/${billDoc.id}`;
           const billMainDocRef = doc(db, billRef);
           const billMainDocSnap = await getDoc(billMainDocRef);
 
@@ -239,7 +240,11 @@ const Index = () => {
 
       // Query to fetch all documents with status "Uncleared"
       const querySnapshot = await getDocs(
-        query(unclearedBalanceRef, where("status", "==", "Uncleared"))
+        query(
+          unclearedBalanceRef,
+          where("societyName", "==", societyName),
+          where("status", "==", "Uncleared")
+        )
       );
 
       let totalUnclearedBalance = 0; // Temporary variable to calculate the total balance
@@ -399,10 +404,8 @@ const Index = () => {
   return (
     <View style={styles.container}>
       {/* Appbar */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title="My Bills" titleStyle={styles.titleStyle} />
-      </Appbar.Header>
+
+      <AppbarComponent title="My Bills" />
 
       {/* Balance Summary */}
       <View style={styles.summaryContainer}>
@@ -485,7 +488,10 @@ const Index = () => {
         )}
         keyExtractor={(item) => item.id}
         renderItem={renderBillItem}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingBottom: insets.bottom + 200 },
+        ]}
         ListEmptyComponent={
           <Text style={styles.emptyMessage}>
             {activeTab === "Unpaid" ? "No Unpaid Bills" : "No Paid Bills"}
@@ -509,7 +515,6 @@ const Index = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2196F3" },
   summaryContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -534,31 +539,7 @@ const styles = StyleSheet.create({
   overdue: { color: "red", fontSize: 12 },
   amountText: { color: "red", fontSize: 16 },
   dueDate: { color: "#555", fontSize: 12 },
-  amount: {
-    position: "absolute",
-    right: 0,
-    top: 10,
-    color: "red",
-    fontWeight: "bold",
-  },
   payButton: { margin: 16, backgroundColor: "#2196F3" },
-  profileContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "#2196F3",
-  },
-  profileText: {
-    fontSize: 14,
-    color: "white",
-  },
-  textContainer: {
-    justifyContent: "center",
-  },
-  avatar: {
-    backgroundColor: "#2196F3", // Match avatar background
-    marginRight: 10,
-  },
   emptyMessage: {
     textAlign: "center",
     fontSize: 16,
@@ -566,11 +547,6 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   row: { flexDirection: "row", alignItems: "center" },
-  titleStyle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
 
   actionsContainer: {
     flexDirection: "row",
@@ -602,7 +578,6 @@ const styles = StyleSheet.create({
   activeActionText: {
     color: "#2196F3",
   },
-  divider: { color: "#fff" },
   footer: {
     position: "absolute",
     left: 0,

@@ -11,7 +11,7 @@ import {
 import React, { useState, useEffect } from "react";
 import AppbarComponent from "@/components/AppbarComponent";
 import { useRouter, Stack } from "expo-router";
-import { collection, getDocs, doc } from "firebase/firestore";
+import { collection, getDocs, doc, query, where } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { useSociety } from "@/utils/SocietyContext";
 import { FontAwesome } from "@expo/vector-icons"; // Import Expo icons
@@ -32,7 +32,9 @@ const Index = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customVisitorCollectionName = `visitor_${societyName}`;
+  // const customVisitorCollectionName = `visitor_${societyName}`;
+
+  const customVisitorCollectionName = "visitor";
   const [loading, setLoading] = useState(false);
 
   const [visitorsData, setVisitorsData] = useState<any[]>([]);
@@ -57,8 +59,14 @@ const Index = () => {
           customVisitorCollectionName
         );
 
+        // Firestore query to filter by uniqueId
+        const q = query(
+          visitorCollectionRef,
+          where("societyName", "==", societyName)
+        );
+
         // Fetch visitor documents
-        const querySnapshot = await getDocs(visitorCollectionRef);
+        const querySnapshot = await getDocs(q);
 
         // Extract data
         const checkedOutVisitors = querySnapshot.docs.map((doc) => {
@@ -239,7 +247,6 @@ export default Index;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FFFFFF" },
-  loader: { marginTop: 20 },
   loaderContainer: {
     flex: 1,
     justifyContent: "center",
@@ -258,21 +265,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, // Optional for outline
     borderColor: "#e0e0e0", // Optional for outline
   },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  innerButton: {
-    flexDirection: "row", // Align icon and text horizontally
-    alignItems: "center", // Center items vertically
-    justifyContent: "center", // Center items inside the button
-    borderWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    marginHorizontal: 5,
-    borderRadius: 2,
-  },
+
   list: {
     padding: 10,
   },
@@ -287,11 +280,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  buttonText: {
-    marginLeft: 2, // Adds spacing between icon and text
-    marginRight: 2,
-    fontSize: 14,
-  },
+
   profileContainer: {
     width: 50,
     height: 50,

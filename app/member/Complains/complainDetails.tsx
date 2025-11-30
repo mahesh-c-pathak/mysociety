@@ -63,7 +63,9 @@ const ComplainDetails = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+
+  const customComplainSubcollectionName = "complains";
 
   // Construct Firestore references
   const complainRef = `Societies/${societyName}/${customWingsSubcollectionName}/${wing}/${customFloorsSubcollectionName}/${floorName}/${customFlatsSubcollectionName}/${flatNumber}/${customComplainSubcollectionName}/${complainId}`;

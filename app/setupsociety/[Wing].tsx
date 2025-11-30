@@ -9,7 +9,6 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import { Button, Appbar } from "react-native-paper";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { db } from "@/firebaseConfig";
 import {
@@ -17,7 +16,6 @@ import {
   getDoc,
   setDoc,
   collection,
-  addDoc,
   getDocs,
   deleteDoc,
   query,
@@ -25,8 +23,11 @@ import {
 } from "firebase/firestore";
 import CustomButton from "@/components/CustomButton";
 import CustomInput from "@/components/CustomInput";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AppbarComponent from "@/components/AppbarComponent";
 
 const WingScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const { Wing, societyName } = useLocalSearchParams(); // Retrieves wing name from the route params
   const sanitizedWing = (Wing as string).trim(); // Sanitize the wing name
   const wingLetter = sanitizedWing.split("-").pop(); // Extracts the wing identifier (e.g., 'A' from 'Wing-A')
@@ -34,7 +35,8 @@ const WingScreen: React.FC = () => {
   const customWingsSubcollectionName = `${societyName} wings`;
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
-  const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  // const customFlatsBillsSubcollectionName = `${societyName} bills`;
+  const customFlatsBillsSubcollectionName = "flatbills";
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -307,11 +309,13 @@ const WingScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Top Appbar */}
-      <Appbar.Header style={styles.header}>
-        <Appbar.BackAction onPress={() => router.back()} color="#fff" />
-        <Appbar.Content title={Wing as string} titleStyle={styles.titleStyle} />
-      </Appbar.Header>
-      <ScrollView>
+
+      <AppbarComponent title={Wing as string} source="Admin" />
+      <ScrollView
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 100, // 👈 add enough gap for footer + FAB
+        }}
+      >
         <View style={{ padding: 16 }}>
           <Text style={styles.heading}>{Wing}</Text>
 
@@ -386,17 +390,16 @@ const WingScreen: React.FC = () => {
             );
           }}
         />
-        <View style={{ minHeight: 50 }}></View>
       </ScrollView>
       {/* Save Button */}
       <View style={styles.fixedButtonContainer}>
-      <CustomButton
-        onPress={() => {
-          handleNext();
-        }}
-        title={"Next"}
-        style={{ backgroundColor: "#6200ee" }}
-      />
+        <CustomButton
+          onPress={() => {
+            handleNext();
+          }}
+          title={"Next"}
+          style={{ backgroundColor: "#6200ee" }}
+        />
       </View>
     </View>
   );
@@ -412,9 +415,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: { backgroundColor: "#6200ee" },
-  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
-  scrollContainer: { padding: 16 },
+
   heading: {
     fontSize: 20,
     fontWeight: "bold",
@@ -443,6 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "flex-start",
+    maxWidth: "46%", // ensures each card fits neatly in 2-column layout
   },
   selectedFormatCard: {
     borderColor: "#6200ee",
@@ -452,9 +454,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
-  nextButton: {
-    marginTop: 16,
-  },
+
   customInputContainer: {
     width: "100%",
     marginBottom: 16,
@@ -467,11 +467,13 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     alignItems: "center",
+    justifyContent: "center",
+    width: "100%", // ensures it stays within the card
   },
   numberBox: {
-    minWidth: 50,
-    margin: 6,
-    padding: 10,
+    width: "28%",
+    margin: 4,
+    padding: 6,
     backgroundColor: "#fff",
     borderRadius: 6,
     alignItems: "center",
@@ -484,16 +486,15 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   fixedButtonContainer: {
-  position: "absolute",
-  bottom: 40,
-  left: 0,
-  right: 0,
-  padding: 16,
-  backgroundColor: "#fff", // ensures button is visible on top of list
-  borderTopWidth: 1,
-  borderTopColor: "#ddd",
-  
-},
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: "#fff", // ensures button is visible on top of list
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+  },
 });
 
 export default WingScreen;

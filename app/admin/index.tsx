@@ -1,21 +1,19 @@
 import React, { useEffect, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
+  StatusBar,
 } from "react-native";
-import { Appbar, Button, IconButton, Card } from "react-native-paper";
+import { Appbar, Button, IconButton, Card, Text } from "react-native-paper";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSociety } from "@/utils/SocietyContext";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
-import { logout } from "@/authService"; // ✅ central auth functions
 import { useCustomBackHandler } from "@/utils/useCustomBackHandler";
-import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { globalStyles } from "@/styles/globalStyles";
 
 interface DashboardItem {
   label: string;
@@ -25,7 +23,7 @@ interface DashboardItem {
 }
 
 export default function AdminHome() {
-  const navigation = useNavigation();
+  // const navigation = useNavigation();
   useCustomBackHandler("/setupsociety"); // back always goes to Screen3
   const router = useRouter();
   const { societyName: societyNameParam } = useLocalSearchParams();
@@ -79,24 +77,23 @@ export default function AdminHome() {
               // Check if params exist and include them in the navigation
               // const params = item.params || {};
               //router.push({ pathname: item.route, params }); // Navigate to the respective screen
-              router.push(item.route as any); // safe cast if TypeScript complains
+              // router.push(item.route as any); // safe cast if TypeScript complains
+              const params = item.params || {};
+              const queryString = new URLSearchParams(
+                params as Record<string, string>
+              ).toString();
+              router.push(`${item.route}?${queryString}` as any);
             }
           }}
         >
-          <IconButton icon={item.icon} size={30} />
+          <View style={styles.iconContainer}>
+            <IconButton icon={item.icon} size={26} iconColor="#5e35b1" />
+          </View>
           <Text style={styles.gridLabel}>{item.label}</Text>
         </TouchableOpacity>
       ))}
     </View>
   );
-
-  const handleFirebaseLogout = async () => {
-    try {
-      await logout(); // ✅ use wrapper
-    } catch (err: any) {
-      Alert.alert("Logout Failed", err.message);
-    }
-  };
 
   if (loading) {
     return <ActivityIndicator size="large" color="#5e35b1" />;
@@ -106,9 +103,13 @@ export default function AdminHome() {
     { label: "Bills", icon: "file-document", route: "/admin/Bills" },
     { label: "Collection", icon: "cart", route: "/admin/Collection" },
     { label: "Accounting", icon: "book-account", route: "/admin/Accounting" },
-    { label: "PhonePe", icon: "book-account", route: "/admin/phonepe" },
-    { label: "Terms", icon: "book-account", route: "/terms" },
-    { label: "privacy-policy", icon: "book-account", route: "/privacypolicy" },
+
+    // { label: "PhonePe", icon: "book-account", route: "/admin/phonepe" },
+
+    /*
+
+    // { label: "Terms", icon: "book-account", route: "/terms" },
+    // { label: "privacy-policy", icon: "book-account", route: "/privacypolicy" },
     {
       label: "Pushnotifications",
       icon: "book-account",
@@ -121,7 +122,7 @@ export default function AdminHome() {
     },
     { label: "Fileupload", icon: "book-account", route: "/admin/Fileupload" },
 
-    { label: "AdminHome", icon: "book-account", route: "/admin/AdminHome" },
+    // { label: "AdminHome", icon: "book-account", route: "/admin/AdminHome" },
 
     {
       label: "ImageKitFileDetails",
@@ -129,10 +130,41 @@ export default function AdminHome() {
       route: "/admin/ImageKitFileDetails",
     },
 
+    */
+
     {
       label: "Complains",
       icon: "note-edit",
       route: "/admin/Complainsadmin/ComplainTypesAdmin",
+    },
+
+    {
+      label: "Export Society Excel",
+      icon: "book-account",
+      route: "/admin/ExportSocietyExcel",
+    },
+
+    {
+      label: "Create Excel Screen",
+      icon: "book-account",
+      route: "/admin/CreateExcelScreen",
+    },
+
+    {
+      label: "Society Template Excel",
+      icon: "book-account",
+      route: "/admin/SocietyTemplateExcel",
+    },
+
+    {
+      label: "TestEmail",
+      icon: "book-account",
+      route: "/admin/TestEmail",
+    },
+    {
+      label: "PnoneSignIn",
+      icon: "book-account",
+      route: "/admin/PnoneSignIn",
     },
   ];
 
@@ -145,24 +177,42 @@ export default function AdminHome() {
       icon: "account-tie",
       route: "/admin//StafAdmin?source=Admin",
     },
-    { label: "Admin", icon: "shield-account" },
+    { label: "Admin", icon: "shield-account", route: "/admin/AssignAdminRole" },
     { label: "Permission", icon: "lock", route: "" },
     { label: "Statistics", icon: "chart-bar" },
   ];
 
   const interactionItems = [
-    { label: "Meeting", icon: "calendar-clock" },
+    // { label: "Meeting", icon: "calendar-clock" },
     { label: "Announcements", icon: "bullhorn", route: "/(Announcements)" },
-    { label: "Event", icon: "calendar" },
-    { label: "Voting", icon: "thumb-up" },
+    // { label: "Event", icon: "calendar" },
+    // { label: "Voting", icon: "thumb-up" },
     { label: "Resources", icon: "file" },
-    { label: "Proposal", icon: "book-open-outline" },
-    { label: "Suggestions", icon: "lightbulb" },
+    // { label: "Proposal", icon: "book-open-outline" },
+    // { label: "Suggestions", icon: "lightbulb" },
     {
       label: "Tasks",
       icon: "clipboard-check",
       route: "/admin/TasksAdmin/TaskTypesAdmin",
     },
+  ];
+
+  const buildingItems = [
+    {
+      label: "Wings",
+      icon: "office-building",
+      route: "/setupsociety/SetupWingsScreen",
+      params: { societyName: societyNameParam },
+    },
+    { label: "Building Info", icon: "information-outline" },
+    { label: "Rules", icon: "gavel", route: "/(Rules)" },
+    {
+      label: "Documents",
+      icon: "folder",
+      route: "/(Documents)/(DocumentsAdmin)",
+    },
+    // { label: "Bank", icon: "bank" },
+    // { label: "Payment Gateway", icon: "credit-card" },
   ];
 
   const gateKeeperItems = [
@@ -187,19 +237,17 @@ export default function AdminHome() {
 
   return (
     <View style={styles.container}>
+      <StatusBar backgroundColor="#6200ee" barStyle="light-content" />
       {/* Top Appbar */}
-      <Appbar.Header>
+      <Appbar.Header style={[styles.header]}>
         <Appbar.Action
           icon="menu"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          onPress={() => console.log("menu pressed")}
+          color="#fff"
         />
-        <Appbar.Content title={societyName} />
-        <IconButton icon="bell" onPress={() => {}} />
+        <Appbar.Content title={societyName} titleStyle={styles.titleStyle} />
+        <Appbar.Action icon="bell" onPress={() => {}} color="#fff" />
       </Appbar.Header>
-      {/* Logout Button */}
-      <Button mode="contained" onPress={handleFirebaseLogout}>
-        Logout
-      </Button>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Subscription Section */}
@@ -227,25 +275,31 @@ export default function AdminHome() {
 
         {/* Quick Access Section */}
         <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
+          <Text style={styles.cardSectionTitle}>Quick Access</Text>
           {renderGrid(quickAccess)}
         </Card>
 
         {/* Directory Section */}
         <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Directory</Text>
+          <Text style={styles.cardSectionTitle}>Directory</Text>
           {renderGrid(directoryItems)}
         </Card>
 
         {/* Interaction Section */}
         <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Interaction</Text>
+          <Text style={styles.cardSectionTitle}>Interaction</Text>
           {renderGrid(interactionItems)}
+        </Card>
+
+        {/* My Building Section */}
+        <Card style={styles.sectionCard}>
+          <Text style={styles.cardSectionTitle}>My Building</Text>
+          {renderGrid(buildingItems)}
         </Card>
 
         {/* Gate Keeper Section */}
         <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Gate Keeper</Text>
+          <Text style={styles.cardSectionTitle}>Gate Keeper</Text>
           {renderGrid(gateKeeperItems)}
         </Card>
       </ScrollView>
@@ -254,28 +308,10 @@ export default function AdminHome() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  appBar: {
-    backgroundColor: "#5e35b1",
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  card: {
-    padding: 16,
-    marginBottom: 16,
-    borderRadius: 8,
-    elevation: 2,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
+  container: { flex: 1, backgroundColor: "#F4F5F7" },
+  header: { backgroundColor: "#6200ee" },
+  titleStyle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold" },
+
   remainingText: {
     fontSize: 16,
     fontWeight: "600",
@@ -294,23 +330,42 @@ const styles = StyleSheet.create({
   shareIcon: {
     alignSelf: "center",
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginVertical: 8,
+  card: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    elevation: 4,
+  },
+  gridItem: {
+    width: "25%",
+    alignItems: "center",
+    marginVertical: 10,
+    paddingVertical: 8,
+  },
+
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
   },
-  gridItem: {
-    width: "23%",
-    alignItems: "center",
+
+  cardSectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
     marginVertical: 8,
   },
   sectionCard: {
-    marginBottom: 16,
+    marginBottom: 20,
     padding: 16,
     borderRadius: 8,
     elevation: 2,
@@ -319,5 +374,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     marginTop: 4,
+
+    paddingHorizontal: 4,
+  },
+  iconContainer: {
+    borderRadius: 12,
+    borderColor: "rgba(98, 0, 238, 0.08)",
+    borderWidth: 2,
   },
 });

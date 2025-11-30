@@ -15,8 +15,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppHeader from "@/components/AppHeader"; // Updated import
 import LoadingIndicator from "@/components/LoadingIndicator"; // new import
 
+import { sendInAppMessage } from "@/utils/sendInAppMessage";
+import { fetchAdminIds } from "@/utils/fetchAdminIds";
+
 const AddComplain = () => {
-  const { userName } = useAuthRole();
+  const { userName, user } = useAuthRole();
+  const userId = user!.uid;
+
   const insets = useSafeAreaInsets();
   const { source } = useLocalSearchParams();
   const localParams = useLocalSearchParams();
@@ -37,7 +42,9 @@ const AddComplain = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const customComplainSubcollectionName = `${societyName} complains`;
+  // const customComplainSubcollectionName = `${societyName} complains`;
+
+  const customComplainSubcollectionName = "complains";
 
   const [complainName, setComplainName] = useState<string>("");
   const [complainCategory, setComplainCategory] = useState<string>("");
@@ -114,6 +121,7 @@ const AddComplain = () => {
 
       // Save complaint data
       await addDoc(complainCollectionRef, {
+        societyName,
         complainName,
         description,
         complainCategory,
@@ -129,6 +137,28 @@ const AddComplain = () => {
       console.log("Complaint saved successfully");
 
       // /(Complains)/(ComplainTypes)?source=Member
+
+      // 🔹 Send in-app message to all admins + complain creator
+      const adminIds = await fetchAdminIds(societyName as string);
+      // Include the complain creator’s UID (userId from auth)
+      const allRecipients = Array.from(
+        new Set([...adminIds, userId].filter(Boolean))
+      ); // removes duplicates & falsy values
+
+      const title = `Complain Created for ${complainName}`;
+      const body = description;
+
+      await Promise.all(
+        allRecipients.map((recipientId) =>
+          sendInAppMessage(
+            societyName as string,
+            recipientId,
+            title,
+            body,
+            "complain_created"
+          )
+        )
+      );
 
       Alert.alert("Success", `Complain Added successfully.`, [
         {

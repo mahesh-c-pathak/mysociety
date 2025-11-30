@@ -1,20 +1,9 @@
 import React, { useState, useEffect } from "react";
-import {
-  View,
-  ScrollView,
-  TextInput,
-  Alert,
-  StyleSheet,
-} from "react-native";
+import { View, ScrollView, TextInput, Alert, StyleSheet } from "react-native";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import { Appbar, Button, Text, Avatar, Switch } from "react-native-paper";
 import Dropdown from "@/utils/DropDown";
-import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore";
+import { collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { useSociety } from "@/utils/SocietyContext";
 import { db } from "@/firebaseConfig";
 import PaymentDatePicker from "@/utils/paymentDate";
@@ -24,11 +13,13 @@ import paymentModeOptions from "@/utils/paymentModeOptions";
 import { fetchbankCashAccountOptions } from "@/utils/bankCashOptionsFetcher";
 import { generateTransactionId } from "@/utils/generateTransactionId";
 import { updateFlatCurrentBalance } from "@/utils/updateFlatCurrentBalance";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Advance = () => {
   const router = useRouter();
   const { societyName } = useSociety();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
   const wing = params.wing as string;
   const floorName = params.floorName as string;
@@ -52,7 +43,9 @@ const Advance = () => {
   const customFloorsSubcollectionName = `${societyName} floors`;
   const customFlatsSubcollectionName = `${societyName} flats`;
 
-  const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+  // const unclearedBalanceSubcollectionName = `unclearedBalances_${societyName}`;
+
+  const unclearedBalanceSubcollectionName = "unclearedBalances";
 
   const [paymentMode, setpaymentMode] = useState<string>("");
   const [showPaymentMode, setShowPaymentMode] = useState<boolean>(false);
@@ -88,13 +81,17 @@ const Advance = () => {
           await fetchbankCashAccountOptions(societyName);
         setAccountFromOptions(accountFromOptions);
         setBankAccountOptions(bankAccountOptions);
-      } catch (error) {
-        Alert.alert("Error", "Failed to fetch bank Cash account options.");
+      } catch (err) {
+        const error = err as Error; // Explicitly cast 'err' to 'Error'
+        Alert.alert(
+          "Error",
+          error.message || "Failed to fetch bank Cash account options."
+        );
       }
     };
 
     fetchbankCashOptions();
-  }, [params?.id]);
+  }, [params.id, societyName]);
 
   useEffect(() => {
     if (bankAccountOptions.some((option) => option.group === groupFrom)) {
@@ -103,7 +100,7 @@ const Advance = () => {
       setShowPaymentMode(false);
       setpaymentMode("Cash");
     }
-  }, [bankAccountOptions, ledgerAccount]);
+  }, [bankAccountOptions, groupFrom, ledgerAccount]);
 
   const handleSave = async () => {
     try {
@@ -138,6 +135,7 @@ const Advance = () => {
 
       // Create a new advance entry
       const newAdvanceEntry = {
+        societyName: societyName,
         status: "Cleared",
         amount: advanceAmount,
         amountReceived: advanceAmount,
@@ -171,7 +169,8 @@ const Advance = () => {
             depositCollectionRef,
             advanceAmount,
             "Add",
-            formattedDate
+            formattedDate,
+            societyName
           );
           console.log("Deposit update result:", result);
         } catch (error) {
@@ -180,7 +179,9 @@ const Advance = () => {
       } else {
         // relevantWing.currentBalance = (relevantWing.currentBalance || 0) + advanceAmount;
         try {
-          const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+          // const currentBalanceSubcollectionName = `currentBalance_${flatNumber}`;
+
+          const currentBalanceSubcollectionName = "flatCurrentBalance";
           const currentbalanceCollectionRef = collection(
             db,
             flatRef,
@@ -191,7 +192,8 @@ const Advance = () => {
             currentbalanceCollectionRef,
             advanceAmount,
             "Add",
-            formattedDate
+            formattedDate,
+            societyName
           );
 
           console.log("Balance update result:", result);
@@ -331,7 +333,7 @@ const Advance = () => {
 
       <Button
         mode="contained"
-        style={styles.saveButton}
+        style={[styles.saveButton, { bottom: insets.bottom }]}
         onPress={() => handleSave()}
       >
         Save

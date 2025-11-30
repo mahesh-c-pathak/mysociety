@@ -1,170 +1,178 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
-import {
-  Text,
-  Card,
-  Button,
-  Divider,
-  TextInput,
-  Chip,
-} from "react-native-paper";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { Text, Divider } from "react-native-paper";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
 import AppbarComponent from "@/components/AppbarComponent";
 import AppbarMenuComponent from "@/components/AppbarMenuComponent";
+import FinancialYearButtons from "@/components/FinancialYearButtons";
+import DateRangePicker from "@/components/DateRangePicker";
+import { getCurrentFinancialYear } from "@/utils/financialYearHelpers";
+import AccountSummaryCards from "@/components/AccountSummaryCards";
 
-interface Transaction {
-  paidFrom: string;
-  paidTo: string;
-  amount: number;
-  type: string;
-}
+import { useSociety } from "@/utils/SocietyContext";
+import {
+  fetchBalanceForDate,
+  fetchLatestBalanceBeforeDate,
+} from "@/utils/fetchbalancefromdatabase";
 
-interface AccountData {
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import LoadingIndicator from "@/components/LoadingIndicator";
+import { formatDate } from "@/utils/dateFormatter";
+import { fetchBankCahBalances } from "@/utils/fetchBankCahBalances";
+
+interface AccountWithBalance {
   account: string;
-  amount: number;
+  balance: number;
 }
 
 const IncomeAndExpenditureScreen: React.FC = () => {
-  
-  const [startDate, setStartDate] = useState("2024-11-01");
-  const [endDate, setEndDate] = useState("2024-11-27");
-  const [IncomeOptions, setIncomeOptions] = useState<string[]>([]);
-  const [ExpenseOptions, setExpenseOptions] = useState<string[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [incomeData, setIncomeData] = useState<AccountData[]>([]);
-  const [expenseData, setExpenseData] = useState<AccountData[]>([]);
+  const { startDate, endDate } = getCurrentFinancialYear(); // returns start and end of current FY
+  const insets = useSafeAreaInsets();
+
+  const { societyName } = useSociety();
+  const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`;
+  const accountsCollectionName = `accounts_${societyName}`;
+
+  const [incomeData, setIncomeData] = useState<
+    { account: string; balance: number }[]
+  >([]);
+  const [expenseData, setExpenseData] = useState<
+    { account: string; balance: number }[]
+  >([]);
+
+  const [IncomeOptions, setIncomeOptions] = useState<AccountWithBalance[]>([]);
+  const [ExpenseOptions, setExpenseOptions] = useState<AccountWithBalance[]>(
+    []
+  );
+
+  const [loading, setLoading] = useState(false);
+  const [accountBalances, setAccountBalances] = useState<any[]>([]);
+
+  const IncomeCategories = ["Direct Income", "Indirect Income"];
+
+  const ExpenditureCategories = [
+    "Direct Expenses",
+    "Indirect Expenses",
+    "Maintenance & Repairing",
+  ];
+
+  const [fromDate, setFromDate] = useState(new Date(startDate));
+  const [toDate, setToDate] = useState(new Date(endDate));
+
+  const handleYearSelect = (start: string, end: string) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+
+    setFromDate(startDate);
+    setToDate(endDate);
+  };
 
   useEffect(() => {
-    const fetchAccountOptions = async () => {
+    const fromDateStr = formatDate(fromDate);
+    const toDateStr = formatDate(toDate);
+
+    const fetchIncomeExpenditureOptionsWithBalance = async () => {
+      setLoading(true);
       try {
-        const ledgerGroupsRef = collection(db, "ledgerGroups");
-
-        // Fetch Income Accounts
-        const fromQuerySnapshot = await getDocs(
-          query(
-            ledgerGroupsRef,
-            where("name", "in", ["Direct Income", "Indirect Income"])
-          )
+        const ledgerGroupsRef = collection(
+          db,
+          "Societies",
+          societyName,
+          ledgerGroupsCollectionName
         );
-        const fromAccounts = fromQuerySnapshot.docs
-          .map((doc) => doc.data().accounts || [])
-          .flat()
-          .filter((account) => account.trim() !== "");
-        setIncomeOptions(fromAccounts);
 
-        // Fetch Expense Accounts
-        const toQuerySnapshot = await getDocs(
-          query(
-            ledgerGroupsRef,
-            where("name", "in", [
-              "Direct Expenses",
-              "Indirect Expenses",
-              "Maintenance & Repairing",
-            ])
-          )
+        const ledgerGroupsSnapshot = await getDocs(ledgerGroupsRef);
+
+        const incomeAccounts: AccountWithBalance[] = [];
+        const expenseAccounts: AccountWithBalance[] = [];
+
+        const ledgerGroupsPromises = ledgerGroupsSnapshot.docs.map(
+          async (ledgerGroupDoc) => {
+            const ledgerGroupName = ledgerGroupDoc.id;
+
+            const accountsRef = collection(
+              db,
+              `Societies/${societyName}/${ledgerGroupsCollectionName}/${ledgerGroupName}/${accountsCollectionName}`
+            );
+
+            const accountsSnapshot = await getDocs(accountsRef);
+
+            const accountsPromises = accountsSnapshot.docs.map(
+              async (accountDoc) => {
+                const accountName = accountDoc.id.trim();
+                if (!accountName) return null;
+
+                const latestBalance = await fetchBalanceForDate(
+                  societyName,
+                  ledgerGroupName,
+                  accountName,
+                  toDateStr
+                );
+
+                return { account: accountName, balance: latestBalance || 0 };
+              }
+            );
+
+            const accountsWithBalances = (
+              await Promise.all(accountsPromises)
+            ).filter((a): a is AccountWithBalance => a !== null);
+
+            if (IncomeCategories.includes(ledgerGroupName)) {
+              incomeAccounts.push(...accountsWithBalances);
+            } else if (ExpenditureCategories.includes(ledgerGroupName)) {
+              expenseAccounts.push(...accountsWithBalances);
+            }
+          }
         );
-        const toAccounts = toQuerySnapshot.docs
-          .map((doc) => doc.data().accounts || [])
-          .flat()
-          .filter((account) => account.trim() !== "");
-        setExpenseOptions(toAccounts);
+
+        await Promise.all(ledgerGroupsPromises);
+
+        // Set state
+        setIncomeOptions(incomeAccounts);
+        setExpenseOptions(expenseAccounts);
+
+        // 3️⃣ Fetch Account Summary Balances (parallel)
+
+        const balances = await await fetchBankCahBalances(
+          societyName,
+          fromDateStr,
+          toDateStr
+        );
+        setAccountBalances(balances);
       } catch (error) {
-        console.error("Error fetching account options:", error);
+        console.error("Error fetching income/expenditure options:", error);
         Alert.alert("Error", "Failed to fetch account options.");
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchTransactions = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "Transaction"));
-        const transactionData: Transaction[] = [];
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          transactionData.push({
-            paidFrom: data.paidFrom,
-            paidTo: data.paidTo,
-            amount: data.amount,
-            type: data.type,
-          });
-        });
-
-        setTransactions(transactionData);
-      } catch (error) {
-        console.error("Error fetching transactions:", error);
-      }
-    };
-
-    fetchAccountOptions();
-    fetchTransactions();
-  }, []);
+    fetchIncomeExpenditureOptionsWithBalance();
+  }, [toDate]); // refetch if toDate changes
 
   useEffect(() => {
-    console.log("IncomeOptions", IncomeOptions);
+    if (IncomeOptions.length > 0) {
+      const filteredIncome = IncomeOptions.filter((item) => item.balance !== 0);
+      setIncomeData(filteredIncome);
+    }
   }, [IncomeOptions]);
 
-  useEffect(() => {
-    // Calculate Income Totals
-    if (IncomeOptions.length > 0 && transactions.length > 0) {
-      const accountBalances: Record<string, number> = {};
-
-      IncomeOptions.forEach((account) => {
-        accountBalances[account] = 0;
-      });
-
-      transactions.forEach((txn) => {
-        if (IncomeOptions.includes(txn.paidFrom)) {
-          accountBalances[txn.paidFrom] -= txn.amount;
-        }
-        if (IncomeOptions.includes(txn.paidTo)) {
-          accountBalances[txn.paidTo] += txn.amount;
-        }
-      });
-
-      const incomeTotals = Object.keys(accountBalances)
-        .map((account) => ({
-          account,
-          amount: accountBalances[account],
-        }))
-        .filter((item) => item.amount !== 0);
-
-      setIncomeData(incomeTotals);
-    }
-  }, [IncomeOptions, transactions]);
+  const totalIncome = incomeData.reduce((sum, item) => sum + item.balance, 0);
+  const totalExpenses = expenseData.reduce(
+    (sum, item) => sum + item.balance,
+    0
+  );
 
   useEffect(() => {
-    // Calculate Expense Totals
-    if (ExpenseOptions.length > 0 && transactions.length > 0) {
-      const accountBalances: Record<string, number> = {};
-
-      ExpenseOptions.forEach((account) => {
-        accountBalances[account] = 0;
-      });
-
-      transactions.forEach((txn) => {
-        if (ExpenseOptions.includes(txn.paidFrom)) {
-          accountBalances[txn.paidFrom] -= txn.amount;
-        }
-        if (ExpenseOptions.includes(txn.paidTo)) {
-          accountBalances[txn.paidTo] += txn.amount;
-        }
-      });
-
-      const expenseTotals = Object.keys(accountBalances)
-        .map((account) => ({
-          account,
-          amount: accountBalances[account],
-        }))
-        .filter((item) => item.amount !== 0);
-
-      setExpenseData(expenseTotals);
+    if (ExpenseOptions.length > 0) {
+      const filteredExpense = ExpenseOptions.filter(
+        (item) => item.balance !== 0
+      );
+      setExpenseData(filteredExpense);
     }
-  }, [ExpenseOptions, transactions]);
-
-  const totalIncome = incomeData.reduce((sum, item) => sum + item.amount, 0);
-  const totalExpenses = expenseData.reduce((sum, item) => sum + item.amount, 0);
+  }, [ExpenseOptions]);
 
   const [menuVisible, setMenuVisible] = useState(false);
   const handleMenuOptionPress = (option: string) => {
@@ -181,6 +189,10 @@ const IncomeAndExpenditureScreen: React.FC = () => {
   const generatePDF = async () => {
     console.log("Generate PDF pressed");
   };
+
+  if (loading) {
+    return <LoadingIndicator />;
+  }
 
   return (
     <View style={styles.container}>
@@ -201,61 +213,43 @@ const IncomeAndExpenditureScreen: React.FC = () => {
         />
       )}
 
-      <ScrollView style={styles.scrollcontainer}>
-        {/* Header Section */}
-        <View style={styles.scrollheader}>
-          <Chip mode="outlined">FY: 2023-24</Chip>
-          <Chip mode="outlined">FY: 2022-23</Chip>
-          <Chip mode="outlined">FY: 2021-22</Chip>
-          <Chip mode="outlined">FY: 2020-21</Chip>
-        </View>
+      {/* ✅ Reusable Financial Year Buttons */}
+      <FinancialYearButtons onYearSelect={handleYearSelect} />
 
-        {/* Date Range Section */}
-        <View style={styles.dateSection}>
-          <TextInput
-            mode="outlined"
-            label="Start Date"
-            value={startDate}
-            onChangeText={setStartDate}
-            style={styles.dateInput}
-          />
-          <TextInput
-            mode="outlined"
-            label="End Date"
-            value={endDate}
-            onChangeText={setEndDate}
-            style={styles.dateInput}
-          />
-          <Button mode="contained" style={styles.goButton}>
-            Go
-          </Button>
-        </View>
+      {/* ✅ Reusable Date Range Picker */}
 
-        {/* Bank and Cash Details */}
-        <View style={styles.cardSection}>
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text>Bank</Text>
-              <Text>Opening Bal: ₹ 0.00</Text>
-              <Text>Closing Bal: ₹ -29000.00</Text>
-            </Card.Content>
-          </Card>
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text>Cash</Text>
-              <Text>Opening Bal: ₹ 0.00</Text>
-              <Text>Closing Bal: ₹ -3500.00</Text>
-            </Card.Content>
-          </Card>
-        </View>
+      <DateRangePicker
+        fromDate={fromDate}
+        toDate={toDate}
+        setFromDate={setFromDate}
+        setToDate={setToDate}
+        onGoPress={closeMenu}
+        minimumDate={new Date(startDate)}
+        maximumDate={new Date(endDate)}
+      />
+      <Divider />
 
+      {/*  ✅ Reusable Bank and Cash Details */}
+      <View style={styles.section}>
+        <AccountSummaryCards balances={accountBalances} />
+      </View>
+      <Divider />
+
+      <ScrollView
+        style={styles.scrollcontainer}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 100, // 👈 add enough gap for footer + FAB
+        }}
+      >
         {/* Income Section */}
-        <Text style={styles.sectionTitle}>Income</Text>
-        <Divider />
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Income</Text>
+        </View>
+
         {incomeData.map((item, index) => (
           <View style={styles.row} key={index}>
             <Text style={styles.category}>{item.account}</Text>
-            <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+            <Text style={styles.amount}>₹ {item.balance.toFixed(2)}</Text>
           </View>
         ))}
         <View style={styles.totalRow}>
@@ -264,12 +258,14 @@ const IncomeAndExpenditureScreen: React.FC = () => {
         </View>
 
         {/* Expense Section */}
-        <Text style={styles.sectionTitle}>Expense</Text>
-        <Divider />
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Expense</Text>
+        </View>
+
         {expenseData.map((item, index) => (
           <View style={styles.row} key={index}>
             <Text style={styles.category}>{item.account}</Text>
-            <Text style={styles.amount}>₹ {item.amount.toFixed(2)}</Text>
+            <Text style={styles.amount}>₹ {item.balance.toFixed(2)}</Text>
           </View>
         ))}
         <View style={styles.totalRow}>
@@ -323,12 +319,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
+  },
+  sectionHeader: {
+    backgroundColor: "#eaeaea",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     marginVertical: 10,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 5,
+    marginHorizontal: 16,
   },
   category: {
     flex: 1,
@@ -344,12 +346,16 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderTopWidth: 1,
     borderTopColor: "#ddd",
+    marginHorizontal: 16,
   },
   totalLabel: {
     fontWeight: "bold",
   },
   totalAmount: {
     fontWeight: "bold",
+  },
+  section: {
+    marginBottom: 6, // small controlled gap between sections
   },
 });
 

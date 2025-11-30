@@ -6,6 +6,8 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams, Stack } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -17,6 +19,7 @@ import { ActivityIndicator } from "react-native-paper";
 import { useAuthRole } from "@/lib/authRole";
 import { db } from "@/firebaseConfig";
 import { doc, updateDoc, getDoc, Timestamp } from "firebase/firestore";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type MessageType = {
   formattedDateTime: string;
@@ -26,6 +29,7 @@ type MessageType = {
 };
 
 const ComplainDetailsAdmin = () => {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { item } = useLocalSearchParams();
   // Parse the passed item
@@ -142,6 +146,9 @@ const ComplainDetailsAdmin = () => {
         params: { complainRef },
       });
     }
+    if (option === "Close Menu") {
+      setMenuVisible(false);
+    }
     setMenuVisible(false);
   };
   const closeMenu = () => {
@@ -149,46 +156,57 @@ const ComplainDetailsAdmin = () => {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={closeMenu}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={{ flex: 1 }}
+    >
       <View style={styles.container}>
-        <Stack.Screen options={{ headerShown: false }} />
-        {/* Appbar Component */}
-        <AppbarComponent
-          title={complainItem.complainName}
-          source="Admin"
-          onPressThreeDot={() => setMenuVisible(!menuVisible)}
-        />
+        <TouchableWithoutFeedback onPress={closeMenu}>
+          <View>
+            <Stack.Screen options={{ headerShown: false }} />
+            {/* Appbar Component */}
+            <AppbarComponent
+              title={complainItem.complainName}
+              source="Admin"
+              onPressThreeDot={() => setMenuVisible(!menuVisible)}
+            />
 
-        {/* Three-dot Menu */}
-        {/* Custom Menu */}
-        {menuVisible && (
-          <AppbarMenuComponent
-            items={["Edit Complain"]}
-            onItemPress={handleMenuOptionPress}
-            closeMenu={closeMenu}
-          />
-        )}
-        <View style={styles.row}>
-          <Text>
-            Status:{" "}
-            <Text style={styles.messageUser}>{complainItem.status}</Text>
-          </Text>
-          <Text>
-            Priority:{" "}
-            <Text style={styles.messageUser}>{complainItem.priority}</Text>
-          </Text>
-          <Text>
-            Type:{" "}
-            <Text style={styles.messageUser}>
-              {complainItem.complainCategory}
-            </Text>
-          </Text>
-        </View>
+            {/* Three-dot Menu */}
+            {/* Custom Menu */}
+            {menuVisible && (
+              <AppbarMenuComponent
+                items={["Edit Complain", "Close Menu"]}
+                onItemPress={handleMenuOptionPress}
+                closeMenu={closeMenu}
+              />
+            )}
+            <View style={styles.row}>
+              <Text>
+                Status:{" "}
+                <Text style={styles.messageUser}>{complainItem.status}</Text>
+              </Text>
+              <Text>
+                Priority:{" "}
+                <Text style={styles.messageUser}>{complainItem.priority}</Text>
+              </Text>
+              <Text>
+                Type:{" "}
+                <Text style={styles.messageUser}>
+                  {complainItem.complainCategory}
+                </Text>
+              </Text>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+
+        {/* Messages List */}
+        {/* Scrollable Messages */}
 
         {/* Messages List */}
         <FlatList
           data={messages}
           keyExtractor={([key]) => key}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }}
           renderItem={({ item: [key, message] }) => (
             <View style={styles.messageCard}>
               <Text style={styles.messageUser}>{message.userName}</Text>
@@ -199,8 +217,9 @@ const ComplainDetailsAdmin = () => {
             </View>
           )}
         />
+
         {/* Message Input */}
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { bottom: insets.bottom }]}>
           <TextInput
             style={styles.input}
             placeholder="Type a message..."
@@ -212,7 +231,7 @@ const ComplainDetailsAdmin = () => {
           </TouchableOpacity>
         </View>
       </View>
-    </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 };
 

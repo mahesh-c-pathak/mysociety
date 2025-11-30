@@ -1,16 +1,6 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  orderBy,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, doc, runTransaction } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 import { Alert } from "react-native";
-
 
 export const updateLedger = async (
   societyName: string,
@@ -21,100 +11,76 @@ export const updateLedger = async (
   date: string // Date in "YYYY-MM-DD" format
 ): Promise<string> => {
   try {
-    
     // Define dynamic collection names
     const ledgerGroupsCollectionName = `ledgerGroups_${societyName}`; // Updated collection name
     const accountsCollectionName = `accounts_${societyName}`; // Updated collection name
     const balancesCollectionName = `balances_${societyName}`; // Updated collection name
 
-    const updateLedgerPromises: Promise<void>[] = [];
-
-    // Reference to the balances subcollection
-    const balancesCollectionRef = collection(
+    const accountRef = doc(
       db,
-      "Societies", 
+      "Societies",
       societyName,
       ledgerGroupsCollectionName,
       ledgerGroup,
       accountsCollectionName,
-      ledgerAccount,
-      balancesCollectionName
+      ledgerAccount
     );
+    const balancesRef = collection(accountRef, balancesCollectionName);
+    const todayRef = doc(balancesRef, date);
 
-    // Check if a balance document exists for the given date
-    const balanceDocRef = doc(balancesCollectionRef, date);
-    const balanceDocSnapshot = await getDoc(balanceDocRef);
+    return await runTransaction(db, async (tx) => {
+      /* ---------------------------------------------
+         1️⃣ READ EVERYTHING FIRST (required by Firestore)
+      ----------------------------------------------*/
+      const [todaySnap, masterSnap] = await Promise.all([
+        tx.get(todayRef),
+        tx.get(accountRef),
+      ]);
 
-    let previousDailyChange = 0;
-    let previousCumulativeBalance = 0;
+      const oldDaily = todaySnap.exists()
+        ? todaySnap.data().dailyChange || 0
+        : 0;
 
-    if (balanceDocSnapshot.exists()) {
-      // If a balance document exists, get the current values
-      previousDailyChange = balanceDocSnapshot.data()?.dailyChange || 0;
-      previousCumulativeBalance =
-        balanceDocSnapshot.data()?.cumulativeBalance || 0;
-    }
+      const oldTotal = masterSnap.exists()
+        ? masterSnap.data().totalBalance || 0
+        : 0;
 
-    // Retrieve all balances ordered by date
-    const balancesQuery = query(balancesCollectionRef, orderBy("date"));
-    const balancesSnapshot = await getDocs(balancesQuery);
+      const lastUpdatedAt = masterSnap.exists()
+        ? masterSnap.data().lastUpdatedAt || null
+        : null;
 
-    // Find the most recent prior cumulative balance
-    let priorCumulativeBalance = 0;
+      /* ---------------------------------------------
+         2️⃣ Compute new values
+      ----------------------------------------------*/
+      const change = option === "Add" ? amount : -amount;
 
-    balancesSnapshot.forEach((docSnapshot) => {
-      const balanceDate = docSnapshot.id;
-      if (balanceDate < date) {
-        priorCumulativeBalance = docSnapshot.data()?.cumulativeBalance || 0;
-      }
-    });
+      const newDaily = oldDaily + change;
 
-    // Calculate the new dailyChange
-    const newDailyChange =
-      option === "Add"
-        ? previousDailyChange + amount
-        : previousDailyChange - amount;
+      // delta = difference between final and previous dailyChange
+      const delta = newDaily - oldDaily;
 
-    // Calculate the new cumulative balance based on the prior date
-    const newCumulativeBalance = priorCumulativeBalance + newDailyChange;
+      const newTotal = oldTotal + delta;
 
-    // Update or create the balance document for the given date
-    updateLedgerPromises.push(
-      setDoc(
-        balanceDocRef,
+      /* ---------------------------------------------
+         3️⃣ NOW WRITE (ALL reads were already done)
+      ----------------------------------------------*/
+
+      // Update daily
+      tx.set(todayRef, { date, dailyChange: newDaily }, { merge: true });
+
+      // Update master ledger
+      tx.set(
+        accountRef,
         {
-          date,
-          dailyChange: newDailyChange,
-          cumulativeBalance: newCumulativeBalance,
+          totalBalance: newTotal,
+          lastUpdatedAt:
+            !lastUpdatedAt || date > lastUpdatedAt ? date : lastUpdatedAt,
         },
         { merge: true }
-      )
-    );
+      );
 
-    // Recalculate cumulative balances for subsequent dates
-    let carryForwardBalance = newCumulativeBalance;
-
-    balancesSnapshot.forEach((docSnapshot) => {
-      const balanceDate = docSnapshot.id;
-      if (balanceDate > date) {
-        const balanceData = docSnapshot.data();
-        const updatedCumulativeBalance =
-          carryForwardBalance + (balanceData.dailyChange || 0);
-
-        carryForwardBalance = updatedCumulativeBalance;
-
-        updateLedgerPromises.push(
-          updateDoc(doc(balancesCollectionRef, balanceDate), {
-            cumulativeBalance: updatedCumulativeBalance,
-          })
-        );
-      }
+      return "Success";
     });
-
-    // Wait for all updates to complete
-    await Promise.all(updateLedgerPromises);
-
-    return "Success";
   } catch (error) {
     console.error("Error updating ledger:", error);
     Alert.alert("Error", "Failed to update ledger.");
